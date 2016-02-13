@@ -30,11 +30,13 @@ module Simp::Rake
     # array of items to additionally clean
     attr_accessor :clean_list
 
-    #
-    attr_accessor :unique_name
+    # directory that contains all the mock chroots
+    attr_accessor :mock_root_dir
 
     # array of items to ignore when checking if the tarball needs to be rebuilt
     attr_accessor :ignore_changes_list
+
+    attr_reader   :spec_info
 
     def initialize( base_dir, unique_name=nil )
        @base_dir            = base_dir
@@ -45,6 +47,7 @@ module Simp::Rake
        @clean_list          = []
        @ignore_changes_list = []
        @chroot_name         = unique_name
+       @mock_root_dir       = ENV.fetch('SIMP_BUILD_MOCK_root','/var/lib/mock')
 
        ::CLEAN.include( @pkg_dir )
 
@@ -80,9 +83,9 @@ module Simp::Rake
 
         # This gets the resting spec file and allows us to pull out the name
         @spec_info   = Simp::RPM.get_info( spec_file )
-        @chroot_name = @chroot_name || "#{@spec_info[:name]}__#{ENV.fetch( 'USER', 'USER' )}"
 
         if chroot
+          @chroot_name = @chroot_name || "#{@spec_info[:name]}__#{ENV.fetch( 'USER', 'USER' )}"
           mock_cmd = mock_pre_check( chroot, @chroot_name, unique ) + " --root #{chroot}"
 
           sh %Q(#{mock_cmd} --copyin #{spec_file} /tmp)
@@ -279,6 +282,12 @@ module Simp::Rake
               end
             end
           end
+
+
+          unless ENV['SIMP_RAKE_MOCK_cleanup'] == 'no'
+            cmd = %Q(#{mock_cmd} --root #{args.chroot} --clean)
+            sh cmd
+          end
         end
       end
     end
@@ -326,6 +335,20 @@ module Simp::Rake
       require_rebuild
     end
 
+
+
+    def mock_ensure_template_dir( chroot )
+      mock_template_ext = "SIMP_BUILD_TEMPLATE"
+      result = false
+      if !File.directory? File.join(@mock_root_dir, mock_template_ext)
+        _mock_cmd = "mock --root #{chroot} --uniqueext=#{mock_template_ext} --init"
+        sh _mock_cmd
+        result = "#{chroot}_#{mock_template_ext}"
+      end
+      result
+    end
+
+
     # Run some pre-checks to make sure that mock will work properly.
     #
     # chroot   = name of mock chroot to use
@@ -338,7 +361,7 @@ module Simp::Rake
       raise %Q(unique_ext must be a String ("#{unique_ext}" = #{unique_ext.class})) unless unique_ext.is_a? String
 
       mock = ENV['mock'] || '/usr/bin/mock'
-      raise(Exception,"Could not find mock on your system, exiting") unless File.executable?('/usr/bin/mock')
+      raise(Exception,"Could not find mock on your system, exiting") unless File.executable?(mock)
 
       mock_configs = Pkg.get_mock_configs
       unless chroot
@@ -351,6 +374,27 @@ module Simp::Rake
           "Error: Invalid mock chroot provided. Your choices are:\n  #{mock_configs.join("\n  ")}"
         )
       end
+
+
+###      dedupe = ENV.fetch( 'SIMP_MOCK_dedupe', false )
+###      if unique && dedupe
+###        chroot_template_ext = mock_ensure_template_dir( chroot )
+###        chroot_template_dir = File.expand_path(chroot_template_ext, @mock_root_dir)
+###        new_chroot_dir      = File.expand_path("#{chroot}_#{uniqueext}",  @mock_root_dir)
+###
+###        if !File.directory? chroot_template_dir
+###          unless File.directory?(chroot_template_dir)
+###            raise(Exception,
+###                  "Could not find mock template dir '#{chroot_template_dir}' "+
+###                  "on your system, exiting")
+###          end
+###
+###          if dedupe == 'sudo_hardlinks'
+###            sh "sudo cp -al '#{chroot}/' '#{new_chroot_dir}/'"
+###          end
+###        end
+###      end
+
 
       # if true, restrict yum to the chroot's local yum cache (defaults to false)
       mock_offline = ENV.fetch( 'SIMP_RAKE_MOCK_OFFLINE', 'N' ).chomp.index( %r{^(1|Y|true|yes)$} ) || false
@@ -392,14 +436,6 @@ module Simp::Rake
 
       # A simple test to see if the chroot is initialized.
       initialized
-    end
-
-    def pry
-      #FIXME: remove this debugging nonsense before release
-      if Rake::verbose.is_a? TrueClass
-        require 'pry'
-        binding.pry
-      end
     end
   end
 end
