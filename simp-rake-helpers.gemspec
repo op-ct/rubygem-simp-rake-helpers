@@ -39,6 +39,7 @@ Gem::Specification.new do |s|
   s.add_runtime_dependency 'beaker',                    '~> 2.0'
   s.add_runtime_dependency 'beaker-rspec',              '~> 5.0'
   s.add_runtime_dependency 'rspec-core',                '~> 3.0'
+  s.add_runtime_dependency 'colorize',                  '~> 0.7'
 
   # for development
   s.add_development_dependency 'gitlog-md',   '~> 0' # To generate HISTORY.md
@@ -64,5 +65,6 @@ Gem::Specification.new do |s|
                 '.gitignore',
                 '.rspec',
                 '.travis.yml',
+                'colorize', '~> 0.7'
                ] & `git ls-files -z .`.split("\0")
 end

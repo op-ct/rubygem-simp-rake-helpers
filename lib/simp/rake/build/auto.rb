@@ -2,6 +2,7 @@
 
 require 'simp/rake'
 require 'json'
+require 'colorize'
 include Simp::Rake
 
 class SIMPBuildException < Exception
@@ -15,6 +16,13 @@ module Simp::Rake::Build
     def initialize( run_dir )
       @base_dir = run_dir
       define
+    end
+
+    def puts_header( msg )
+      puts msg.colorize( :green )
+    end
+    def puts_hint( msg )
+      puts msg.colorize( :blue )
     end
 
     # define rake tasks
@@ -123,60 +131,60 @@ module Simp::Rake::Build
           # check out subrepos
           # --------------------
           if do_checkout && !tarball
-            puts
-            puts '='*80
-            puts "## Checking out subrepositories"
-            puts
-            puts "     (skip with `SIMP_BUILD_checkout=no`)"
-            puts '='*80
+            puts_header
+            puts_header '='*80
+            puts_header "## Checking out subrepositories"
+            puts_header
+            puts_header "     (skip with `SIMP_BUILD_checkout=no`)"
+            puts_header '='*80
             Dir.chdir repo_root_dir
             Rake::Task['deps:status'].invoke
             if @dirty_repos && !ENV['SIMP_BUILD_force_dirty'] == 'yes'
               raise SIMPBuildException, "ERROR: Dirty repos detected!  I refuse to destroy uncommitted work."
             else
-              puts
-              puts '-'*80
-              puts "#### Checking out subrepositories using method '#{method}'"
-              puts '-'*80
+              puts_header
+              puts_header '-'*80
+              puts_header "#### Checking out subrepositories using method '#{method}'"
+              puts_header '-'*80
               Rake::Task['deps:checkout'].invoke(method)
             end
 
             if do_bundle
-              puts
-              puts '-'*80
-              puts "#### Running bundler in all repos"
-              puts '     (Disable with `SIMP_BUILD_bundle=no`)'
-              puts '-'*80
+              puts_header
+              puts_header '-'*80
+              puts_header "#### Running bundler in all repos"
+              puts_header '     (Disable with `SIMP_BUILD_bundle=no`)'
+              puts_header '-'*80
               Rake::Task['build:bundle'].invoke
             else
-              puts
-              puts '-'*80
-              puts "#### SKIPPED: bundler in all repos"
-              puts '     (Force with `SIMP_BUILD_bundle=yes`)'
-              puts '-'*80
+              puts_header
+              puts_header '-'*80
+              puts_header "#### SKIPPED: bundler in all repos"
+              puts_header '     (Force with `SIMP_BUILD_bundle=yes`)'
+              puts_header '-'*80
             end
           else
-            puts
-            puts '='*80
-            puts "#### skipping sub repository checkout (because `SIMP_BUILD_checkout=no`)"
-            puts
+            puts_header
+            puts_header '='*80
+            puts_header "#### skipping sub repository checkout (because `SIMP_BUILD_checkout=no`)"
+            puts_header
           end
 
           # build tarball
           # --------------------
           if tarball
-            puts
-            puts '-'*80
-            puts "#### Using pre-existing tarball:"
-            puts "           '#{tarball}'"
-            puts
-            puts '-'*80
+            puts_header
+            puts_header '-'*80
+            puts_header "#### Using pre-existing tarball:"
+            puts_header "           '#{tarball}'"
+            puts_header
+            puts_header '-'*80
 
           else
-            puts
-            puts '='*80
-            puts "#### Running tar:build in all repos"
-            puts '='*80
+            puts_header
+            puts_header '='*80
+            puts_header "#### Running tar:build in all repos"
+            puts_header '='*80
             $simp_tarballs = {}
             Rake::Task['tar:build'].invoke(target_data['mock'],key_name,do_docs)
             tarball = $simp_tarballs.fetch(target_data['flavor'])
@@ -184,10 +192,10 @@ module Simp::Rake::Build
 
           # yum sync
           # --------------------
-          puts
-          puts '-'*80
-          puts "#### rake build:yum:sync[#{target_data['flavor']},#{target_data['os_version']}]"
-          puts '-'*80
+          puts_header
+          puts_header '-'*80
+          puts_header "#### rake build:yum:sync[#{target_data['flavor']},#{target_data['os_version']}]"
+          puts_header '-'*80
           Rake::Task['build:yum:sync'].invoke(target_data['flavor'],target_data['os_version'])
 
           # If you have previously downloaded packages from yum, you may need to run
@@ -202,38 +210,38 @@ module Simp::Rake::Build
           #
           # --------------------
           if do_unpack
-            puts
-            puts '='*80
-            puts "#### unpack ISOs into staging directory"
-            puts "     staging area: '#{staging_dir}'"
-            puts
-            puts "     (skip with `SIMP_BUILD_unpack=no`)"
-            puts '='*80
-            puts
+            puts_header
+            puts_header '='*80
+            puts_header "#### unpack ISOs into staging directory"
+            puts_header "     staging area: '#{staging_dir}'"
+            puts_header
+            puts_header "     (skip with `SIMP_BUILD_unpack=no`)"
+            puts_header '='*80
+            puts_header
 
             Dir.glob( File.join(staging_dir, "#{target_data['flavor']}*/") ).each do |f|
               FileUtils.rm_f( f , :verbose => verbose )
             end
 
             target_data['isos'].each do |iso|
-              puts "---- rake unpack[#{iso},#{do_merge},#{Dir.pwd},isoinfo,#{target_data['os_version']}]"
+              puts_header "---- rake unpack[#{iso},#{do_merge},#{Dir.pwd},isoinfo,#{target_data['os_version']}]"
               Rake::Task['unpack'].reenable
               Rake::Task['unpack'].invoke(iso,do_merge,Dir.pwd,'isoinfo',target_data['os_version'])
             end
           else
-            puts
-            puts '='*80
-            puts "#### skipping ISOs unpack (because `SIMP_BUILD_unpack=no`)"
-            puts
+            puts_header
+            puts_header '='*80
+            puts_header "#### skipping ISOs unpack (because `SIMP_BUILD_unpack=no`)"
+            puts_header
           end
 
           Dir.chdir repo_root_dir
 
-          puts
-          puts '='*80
-          puts "#### iso:build[#{tarball}]"
-          puts '='*80
-          puts
+          puts_header
+          puts_header '='*80
+          puts_header "#### iso:build[#{tarball}]"
+          puts_header '='*80
+          puts_header
 
           Rake::Task['iso:build'].invoke(tarball,staging_dir,do_prune)
 
@@ -259,12 +267,12 @@ module Simp::Rake::Build
             output_file = output_file.sub(/\.iso$/i, "__#{iso_name_tag}.iso")
           end
 
-          puts
-          puts '='*80
-          puts "#### Moving '#{@simp_output_iso}' into:"
-          puts "       '#{output_dir}/#{output_file}'"
-          puts '='*80
-          puts
+          puts_header
+          puts_header '='*80
+          puts_header "#### Moving '#{@simp_output_iso}' into:"
+          puts_header "       '#{output_dir}/#{output_file}'"
+          puts_header '='*80
+          puts_header
 
           iso = File.join(output_dir,output_file)
           FileUtils.mkdir_p File.dirname(iso), :verbose => verbose
@@ -273,20 +281,20 @@ module Simp::Rake::Build
           # write vars.json for packer build
           # --------------------------------------
           vars_file = iso.sub(/.iso$/, '.json')
-          puts
-          puts '='*80
-          puts "#### Checksumming #{iso}..."
-          puts '='*80
-          puts
+          puts_header
+          puts_header '='*80
+          puts_header "#### Checksumming #{iso}..."
+          puts_header '='*80
+          puts_header
 
           sum = `sha256sum "#{iso}"`.split(/ +/).first
 
-          puts
-          puts '='*80
-          puts "#### Writing packer data to:"
-          puts "       '#{vars_file}'"
-          puts '='*80
-          puts
+          puts_header
+          puts_header '='*80
+          puts_header "#### Writing packer data to:"
+          puts_header "       '#{vars_file.colorize(:yellow)}'"
+          puts_header '='*80
+          puts_header
           box_distro_release = "SIMP-#{target_release}-#{File.basename(target_data['isos'].first).sub(/\.iso$/,'').sub(/-x86_64/,'')}"
           packer_vars = {
             'box_simp_release'   => target_release,
@@ -297,39 +305,39 @@ module Simp::Rake::Build
             'new_password'       => 'suP3rP@ssw0r!suP3rP@ssw0r!suP3rP@ssw0r!',
             'output_directory'   => './OUTPUT',
           }
-          File.open(vars_file, 'w'){|f| f.puts packer_vars.to_json }
+          File.open(vars_file, 'w'){|f| f.puts_header packer_vars.to_json }
 
-          puts
-          puts '='*80
-          puts "#### FINIS!"
-          puts '='*80
-          puts
+          puts_header
+          puts_header '='*80
+          puts_header "#### FINIS!"
+          puts_header '='*80
+          puts_header
         end
 
       end
 
       def get_target_data(target_release, iso_paths, yaml_file, do_checksum, verbose )
-        puts '='*80
-        puts "## validating ISOs for target:"
-        puts "      '#{target_release}' in '#{iso_paths}'"
-        puts '='*80
-        puts
+        puts_header '='*80
+        puts_header "## validating ISOs for target:"
+        puts_header "      '#{target_release}' in '#{iso_paths}'"
+        puts_header '='*80
+        puts_header
 
         mapper          = Simp::Build::ReleaseMapper.new(target_release, yaml_file, do_checksum == 'true')
         mapper.verbose  = true || verbose
         target_data     = mapper.autoscan_unpack_list( iso_paths )
 
-        puts '-'*80
-        puts "## target data:"
-        puts ''
-        puts "     target release: '#{target_release}'"
-        puts "     target flavor:  '#{target_data['flavor']}'"
-        puts "     source isos:"
+        puts_header '-'*80
+        puts_hint "## target data:"
+        puts_hint ''
+        puts_hint "     target release: '#{target_release}'"
+        puts_hint "     target flavor:  '#{target_data['flavor']}'"
+        puts_hint "     source isos:"
         target_data['isos'].each do |iso|
-          puts "        - #{iso}"
+          puts_header "        - #{iso}"
         end
-        puts '-'*80
-        puts
+        puts_header '-'*80
+        puts_header
         sleep 3
 
         target_data
@@ -344,13 +352,13 @@ module Simp::Rake::Build
                "       Use SIMP_BUILD_staging_dir='path/to/staging/dir'\n\n"
         end
         if do_rm_staging
-          puts
-          puts '-'*80
-          puts '#### Ensuring previous staging directory is removed:'
-          puts "       '#{staging_dir}'"
-          puts
-          puts '     (disable this with `SIMP_BUILD_rm_staging_dir=no`)'
-          puts '-'*80
+          puts_header
+          puts_header '-'*80
+          puts_header '#### Ensuring previous staging directory is removed:'
+          puts_header "       '#{staging_dir}'"
+          puts_header
+          puts_hint   '     (disable this with `SIMP_BUILD_rm_staging_dir=no`)'
+          puts_header '-'*80
 
           FileUtils.rm_rf staging_dir, :verbose => verbose
         elsif File.exists? staging_dir
