@@ -9,7 +9,8 @@ gem_sources.each { |gem_source| source gem_source }
 
 gemspec
 
-gem 'simp-beaker-helpers'
+gem 'ruby-progressbar'
+gem 'simp-build-helpers'
 
 if puppetversion
   gem 'puppet', puppetversion
