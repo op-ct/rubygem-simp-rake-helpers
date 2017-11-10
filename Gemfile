@@ -11,7 +11,7 @@ gemspec
 
 gem 'ruby-progressbar'
 gem 'simp-build-helpers'
-gem 'simp-beaker-helpers'
+gem 'simp-beaker-helpers', ENV.fetch('SIMP_BEAKER_HELPERS_VERSION', '~> 1.7')
 
 if puppetversion
   gem 'puppet', puppetversion

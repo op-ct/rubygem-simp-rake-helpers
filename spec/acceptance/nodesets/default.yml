@@ -27,6 +27,10 @@ HOSTS:
       - 'runuser build_user -l -c "rvm use default; gem install --no-ri --no-rdoc json"'
       - 'runuser build_user -l -c "rvm use default; gem install --no-ri --no-rdoc charlock_holmes"'
       - 'runuser build_user -l -c "rvm use default; gem install --no-ri --no-rdoc posix-spawn"'
+        # hacks to survive simp-beaker-helpers' 1.5.7+ `facter interfaces` hack
+      - 'yum install -y rubygems'
+      - 'gem install facter'
+      - 'for _pth in `gem env gempath | tr ":" "\n" `; do ! [[ "${_pth}" =~ ^/root ]] && chmod -Rv go=u-w "${_pth}" ; done '
     # NOTE: the './' syntax requires BKR-704
     mount_folders:
       folder1:
@@ -61,6 +65,10 @@ HOSTS:
       - 'runuser build_user -l -c "rvm use default; gem install --no-ri --no-rdoc json"'
       - 'runuser build_user -l -c "rvm use default; gem install --no-ri --no-rdoc charlock_holmes"'
       - 'runuser build_user -l -c "rvm use default; gem install --no-ri --no-rdoc posix-spawn"'
+        # hacks to survive simp-beaker-helpers' 1.5.7+ `facter interfaces` hack
+      - 'yum install -y rubygems'
+      - 'gem install facter'
+      - 'for _pth in `gem env gempath | tr ":" "\n" `; do ! [[ "${_pth}" =~ ^/root ]] && chmod -Rv go=u-w "${_pth}" ; done '
     # NOTE: the './' syntax requires BKR-704
     mount_folders:
       folder1:
