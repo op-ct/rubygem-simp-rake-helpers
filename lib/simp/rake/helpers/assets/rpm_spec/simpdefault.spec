@@ -304,35 +304,51 @@ mkdir -p %{buildroot}/%{prefix}
 %defattr(0640,root,root,0750)
 %{prefix}/%{module_name}
 
-# when $1 = 1, this is an install
-# when $1 = 2, this is an upgrade
-%pre
 %{lua:
-
-scriptlet_name    = 'pre'
-scriptlet_content = "/usr/local/sbin/simp_rpm_helper --rpm_dir=%{prefix}/%{module_name} --rpm_section='pre' --rpm_status=$1"
-scriptlet_file    = io.open(src_dir .. "/build/rpm_metadata/scriptlets" .. scriptlet_name, "r")
-if scriptlet_file then
-  scriptlet_content = scriptlet_file:read("*all")
+-- ----------------------------------------------------------------
+--
+-- scriptlet_name:    name of scriptlet or trigger section (e.g., 'pre', 'triggerin -- foo'
+-- scriptlet_content: normal content of scriptlet
+-- ----------------------------------------------------------------
+function overrideable_scriptlet (scriptlet_name, scriptlet_content)
+  local scriptlet_content = scriptlet_content or ''
+  local scriptlet_file    = io.open(src_dir .. "/build/rpm_metadata/scriptlets" .. scriptlet_name, "r")
+  if scriptlet_file then
+    scriptlet_content = scriptlet_file:read("*all")
+  end
+  print(
+    rpm.expand(
+      scriptlet_content.gsub(
+        scriptlet_content,
+        '__SCRIPTLET_NAME__',
+        scriptlet_name
+      )
+    ) .. "\n"
+  )
 end
-print(scriptlet_content .. "\n")
+
+default_scriptlet_content = "/usr/local/sbin/simp_rpm_helper --rpm_dir=%{prefix}/%{module_name} --rpm_section='__SCRIPTLET_NAME__' --rpm_status=$1"
 
 }
-
+%pre
 # when $1 = 1, this is an install
 # when $1 = 2, this is an upgrade
+%{lua:overrideable_scriptlet('pre', default_scriptlet_content)}
+
 %post
-/usr/local/sbin/simp_rpm_helper --rpm_dir=%{prefix}/%{module_name} --rpm_section='post' --rpm_status=$1
+# when $1 = 1, this is an install
+# when $1 = 2, this is an upgrade
+%{lua:overrideable_scriptlet('post', default_scriptlet_content)}
 
-# when $1 = 1, this is the uninstall of the previous version during an upgrade
-# when $1 = 0, this is the uninstall of the only version during an erase
 %preun
-/usr/local/sbin/simp_rpm_helper --rpm_dir=%{prefix}/%{module_name} --rpm_section='preun' --rpm_status=$1
-
 # when $1 = 1, this is the uninstall of the previous version during an upgrade
 # when $1 = 0, this is the uninstall of the only version during an erase
+%{lua:overrideable_scriptlet('preun', default_scriptlet_content)}
+
 %postun
-/usr/local/sbin/simp_rpm_helper --rpm_dir=%{prefix}/%{module_name} --rpm_section='postun' --rpm_status=$1
+# when $1 = 1, this is the uninstall of the previous version during an upgrade
+# when $1 = 0, this is the uninstall of the only version during an erase
+%{lua:overrideable_scriptlet('postun', default_scriptlet_content)}
 
 %changelog
 %{lua:
