@@ -306,7 +306,7 @@ mkdir -p %{buildroot}/%{prefix}
 
 %{lua:
 -- ----------------------------------------------------------------
--- function: overrideable_scriptlet
+-- function: define_scriptlet
 --
 -- arguments:
 --
@@ -314,15 +314,15 @@ mkdir -p %{buildroot}/%{prefix}
 --                      (e.g., 'pre', 'triggerin -- foo')
 --   scriptlet_content: normal content of scriptlet
 -- ----------------------------------------------------------------
-function overrideable_scriptlet (scriptlet_name, scriptlet_content, custom_scriptlets)
+function define_scriptlet (scriptlet_name, scriptlet_content, defined_scriptlets)
   local scriptlet_content = scriptlet_content or ''
 
   if ( not string.match(scriptlet_name, '^%l') ) then
     print("### WARNING: invalid scriptlet name '"..scriptlet_name.."'\n")
     do return end
   end
-  if custom_scriptlets then
-    for i,n in ipairs(custom_scriptlets) do
+  if defined_scriptlets then
+    for i,n in ipairs(defined_scriptlets) do
       if (n == scriptlet_name) then
         print("### WARNING: skipped duplicate scriptlet '"..scriptlet_name.."'\n")
         do return end
@@ -342,7 +342,7 @@ function overrideable_scriptlet (scriptlet_name, scriptlet_content, custom_scrip
     print( '%' .. scriptlet_name .. "\n" )
   end
   print( scriptlet_content.. "\n\n")
-  table.insert(custom_scriptlets,scriptlet_name)
+  table.insert(defined_scriptlets,scriptlet_name)
 end
 
 default_scriptlet_content = "/usr/local/sbin/simp_rpm_helper --rpm_dir=%{prefix}/%{module_name} --rpm_section='%{scriptlet_name}' --rpm_status=$1"
@@ -352,7 +352,7 @@ scriptlets_dir = src_dir .. "/scriptlets/"
 
 print("# scriptlets_dir = '"..scriptlets_dir.."'\n# ---\n")
 
-custom_scriptlets = {}
+defined_scriptlets = {}
 if (posix.stat(scriptlets_dir, 'type') == 'directory') then
   for i,p in pairs(posix.dir(scriptlets_dir)) do
     local scriptlet_path = scriptlets_dir .. p
@@ -360,7 +360,7 @@ if (posix.stat(scriptlets_dir, 'type') == 'directory') then
       local scriptlet_file = io.open(scriptlet_path)
       if scriptlet_file then
         local scriptlet_content = scriptlet_file:read("*all")
-        overrideable_scriptlet(p,scriptlet_content, custom_scriptlets)
+        define_scriptlet(p,scriptlet_content, defined_scriptlets)
       else
         print("# WARNING: could not read "..scriptlet_path.."\n")
       end
@@ -371,29 +371,29 @@ else
 end
 
 
-overrideable_scriptlet('pre',
+define_scriptlet('pre',
 "# when $1 = 1, this is an install\n" ..
 "# when $1 = 2, this is an upgrade\n" ..
 default_scriptlet_content,
-custom_scriptlets )
+defined_scriptlets )
 
-overrideable_scriptlet('post',
+define_scriptlet('post',
 "# when $1 = 1, this is an install\n" ..
 "# when $1 = 2, this is an upgrade\n" ..
 default_scriptlet_content,
-custom_scriptlets )
+defined_scriptlets )
 
-overrideable_scriptlet('preun',
+define_scriptlet('preun',
 "# when $1 = 1, this is an install\n" ..
 "# when $1 = 0, this is an upgrade\n" ..
 default_scriptlet_content,
-custom_scriptlets )
+defined_scriptlets )
 
-overrideable_scriptlet('postun',
+define_scriptlet('postun',
 "# when $1 = 1, this is an install\n" ..
 "# when $1 = 0, this is an upgrade\n" ..
 default_scriptlet_content,
-custom_scriptlets )
+defined_scriptlets )
 
 }
 
