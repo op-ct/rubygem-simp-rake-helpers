@@ -307,7 +307,17 @@ mkdir -p %{buildroot}/%{prefix}
 # when $1 = 1, this is an install
 # when $1 = 2, this is an upgrade
 %pre
-/usr/local/sbin/simp_rpm_helper --rpm_dir=%{prefix}/%{module_name} --rpm_section='pre' --rpm_status=$1
+%{lua:
+
+scriptlet_name    = 'pre'
+scriptlet_content = "/usr/local/sbin/simp_rpm_helper --rpm_dir=%{prefix}/%{module_name} --rpm_section='pre' --rpm_status=$1"
+scriptlet_file    = io.open(src_dir .. "/build/rpm_metadata/scriptlets" .. scriptlet_name, "r")
+if scriptlet_file then
+  scriptlet_content = scriptlet_file:read("*all")
+end
+print(scriptlet_content .. "\n")
+
+}
 
 # when $1 = 1, this is an install
 # when $1 = 2, this is an upgrade
