@@ -84,33 +84,36 @@ end
 
 shared_examples_for "a pre-SIMP6 RPM generator" do
   it "should create an RPM and leave the mock directory when SIMP_RAKE_MOCK_cleanup=no" do
-    skip 'FIXME: Fix or remove this feature/test'
-    comment "produces RPM"
-    on test_host, %(#{run_cmd} "cd #{testpackage_dir}; SIMP_RAKE_MOCK_cleanup=no #{env_vars[build_type]} rake pkg:rpm[epel-#{test_dist}-x86_64,true]")
-    on test_host, %(test -f #{testpackage_rpm})
+    if test_dist == '6'
+      skip 'FIXME: Fix or remove this feature/test'
+    else
+      comment "produces RPM"
+      on test_host, %(#{run_cmd} "cd #{testpackage_dir}; SIMP_RAKE_MOCK_cleanup=no #{env_vars[build_type]} rake pkg:rpm[epel-#{test_dist}-x86_64,true]")
+      on test_host, %(test -f #{testpackage_rpm})
 
-    comment "produces RPM with appropriate dependencies"
-    on test_host, %(rpm -qpR #{testpackage_rpm} | grep -q pupmod-simp-foo)
-    on test_host, %(rpm -qpR #{testpackage_rpm} | grep -q pupmod-simp-simplib)
-    on test_host, %(rpm -qpR #{testpackage_rpm} | grep -q pupmod-puppetlabs-stdlib)
-    on test_host, %(rpm -qp --provides #{testpackage_rpm} | grep -q -x "pupmod-testpackage = 0.0.1-0")
-    on test_host, %(rpm -qp --provides #{testpackage_rpm} | grep -q -x "simp-testpackage = 0.0.1-0")
-    on test_host, %(rpm -qp --queryformat "[%{obsoletes}\\n]" #{testpackage_rpm} | grep -q "^pupmod-testpackage")
-    on test_host, %(rpm -qp --queryformat "[%{obsoletes}\\n]" #{testpackage_rpm} | grep -q "^simp-testpackage")
+      comment "produces RPM with appropriate dependencies"
+      on test_host, %(rpm -qpR #{testpackage_rpm} | grep -q pupmod-simp-foo)
+      on test_host, %(rpm -qpR #{testpackage_rpm} | grep -q pupmod-simp-simplib)
+      on test_host, %(rpm -qpR #{testpackage_rpm} | grep -q pupmod-puppetlabs-stdlib)
+      on test_host, %(rpm -qp --provides #{testpackage_rpm} | grep -q -x "pupmod-testpackage = 0.0.1-0")
+      on test_host, %(rpm -qp --provides #{testpackage_rpm} | grep -q -x "simp-testpackage = 0.0.1-0")
+      on test_host, %(rpm -qp --queryformat "[%{obsoletes}\\n]" #{testpackage_rpm} | grep -q "^pupmod-testpackage")
+      on test_host, %(rpm -qp --queryformat "[%{obsoletes}\\n]" #{testpackage_rpm} | grep -q "^simp-testpackage")
 
-    comment "RPM generated does not require simp-adapter"
-    on test_host, %(rpm -qpR #{testpackage_rpm} | grep -q simp-adapter), {:acceptable_exit_codes => [1]}
+      comment "RPM generated does not require simp-adapter"
+      on test_host, %(rpm -qpR #{testpackage_rpm} | grep -q simp-adapter), {:acceptable_exit_codes => [1]}
 
-    comment "produces RPM with a sourced CHANGELOG"
-    on test_host, %(rpm --changelog -qp #{testpackage_rpm} | grep -q Stallman)
+      comment "produces RPM with a sourced CHANGELOG"
+      on test_host, %(rpm --changelog -qp #{testpackage_rpm} | grep -q Stallman)
 
-    comment "produces RPM without SIMP6-specific appropriate pre/post/preun/postun"
-    on test_host,
-      %(rpm -qp --scripts #{testpackage_rpm} | grep -q -x "/usr/local/sbin/simp_rpm_helper"),
-      {:acceptable_exit_codes => [1]}
+      comment "produces RPM without SIMP6-specific appropriate pre/post/preun/postun"
+      on test_host,
+        %(rpm -qp --scripts #{testpackage_rpm} | grep -q -x "/usr/local/sbin/simp_rpm_helper"),
+        {:acceptable_exit_codes => [1]}
 
-    comment "keeps mock chroot when SIMP_RAKE_MOCK_cleanup=no"
-    on test_host, %(test -d /var/lib/mock/epel-#{test_dist}-x86_64-pupmod-simp-testpackage__build_user)
+      comment "keeps mock chroot when SIMP_RAKE_MOCK_cleanup=no"
+      on test_host, %(test -d /var/lib/mock/epel-#{test_dist}-x86_64-pupmod-simp-testpackage__build_user)
+    end
   end
 
   it "should handle variants" do
