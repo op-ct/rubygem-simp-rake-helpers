@@ -4,10 +4,11 @@
   - Add `Vagrantfile` to provide a pristine beaker/docker setup
   - New env var: `SIMP_RPM_verbose=yes`
   - New env var: `SIMP_RAKE_PKG_verbose=yes`
-- Refactored acceptance test structure
-* simpdefault.spec Lua code improvements:
+- Refactor acceptance test structure
+* Improve `simpdefault.spec` Lua code troubleshooting:
   - Improved error messages
   - Added stderr warnings
+  - Cleaned up header comments
 
 ### 5.3.0 / 2018-02-02
 * Add ability to specify external, non-module, RPM dependencies for
