@@ -91,6 +91,7 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
     comment "\n\n== scriptlets data structure:"
     require 'pp'
     comment scriptlets.pretty_print_inspect
+    scriptlets
   end
 
 
