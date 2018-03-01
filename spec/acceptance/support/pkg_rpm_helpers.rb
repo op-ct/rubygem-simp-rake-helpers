@@ -79,7 +79,7 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
            logs/build.rpm.out
            logs/build.rpm.err
       ).each do |log_file |
-          _from = File.expand_path( log_file, File.dirname(rpm_file) }
+          _from = File.expand_path(log_file, File.dirname(rpm_file))
           _to   = File.join( dir, log_file )
           result = scp_from(host, _from, _to)
           comment "\n\n== LOGFILE: #{log_file}\n"
