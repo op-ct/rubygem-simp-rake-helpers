@@ -68,7 +68,16 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
     _labels  = scriptlet_label_map.keys.join('|')
     rx_scriptlet_blocks = /^(?<block>(?<scriptlet>#{_labels}) scriptlet.*?(\r|\n)(?<content>.*?))(?=\n#{_labels}|\Z)/m
 
+    comment "Verify RPM version\n\t(FIXME: this is to aid troubleshooting within Travis CI―remove when done!)"
+    on host, 'rpm --version; cat cat /etc/redhat-release; true'
+
     result = on host, %Q(rpm -qp --scripts #{rpm_file})
+
+    comment "\n\n== result.stdout:"
+    comment result.stdout
+
+
+
 
     scriptlets = {}
     result.stdout.scan(rx_scriptlet_blocks) do
@@ -78,7 +87,10 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
       scriptlet[:full_block]   = $~[:block]
       scriptlet[:bare_content] = scriptlet[:content].gsub(/^((--|#).*?[\r\n]+)/,'')
     end
-    scriptlets
+
+    comment "\n\n== scriptlets data structure:"
+    require 'pp'
+    comment scriptlets.pretty_print_inspect
   end
 
 
