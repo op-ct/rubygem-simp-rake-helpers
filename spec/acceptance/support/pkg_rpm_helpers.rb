@@ -68,8 +68,27 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
     _labels  = scriptlet_label_map.keys.join('|')
     rx_scriptlet_blocks = /^(?<block>(?<scriptlet>#{_labels}) scriptlet.*?(\r|\n)(?<content>.*?))(?=\n#{_labels}|\Z)/m
 
+
+    comment "\n\n\n===== RPM LOGS\n"
+
+    require 'tmpdir'
+    Dir.mktmpdir do |dir|
+      %w(
+           logs/build.srpm.out
+           logs/build.srpm.err
+           logs/build.rpm.out
+           logs/build.rpm.err
+      ).each do |log_file |
+          _from = File.expand_path( log_file, File.dirname(rpm_file) }
+          _to   = File.join( dir, log_file )
+          result = scp_from(host, _from, _to)
+          comment "\n\n== LOGFILE: #{log_file}\n"
+          comment File.read( _to )
+      end
+    end
+
     comment "Verify RPM version\n\t(FIXME: this is to aid troubleshooting within Travis CI―remove when done!)"
-    on host, 'rpm --version; cat cat /etc/redhat-release; true'
+    on host, 'rpm --version; cat /etc/redhat-release; true'
 
     result = on host, %Q(rpm -qp --scripts #{rpm_file})
 
