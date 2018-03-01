@@ -73,14 +73,13 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
 
     result = on host, %Q(rpm -qp --scripts #{rpm_file})
 
-    comment "\n\n== result.stdout:"
-    comment result.stdout
+    comment "\n\n== result.stdout:\n\n#{result.stdout.to_s}\n"
 
-
+    comment "\n\n== regex:\n\n#{rx_scriptlet_blocks.source}\n"
 
 
     scriptlets = {}
-    result.stdout.scan(rx_scriptlet_blocks) do
+    result.stdout.to_s.scan(rx_scriptlet_blocks) do
       scriptlet = scriptlets[$~[:scriptlet]] ||= { :count => 0 }
       scriptlet[:count]       += 1
       scriptlet[:content]      = $~[:content].strip
@@ -88,9 +87,9 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
       scriptlet[:bare_content] = scriptlet[:content].gsub(/^((--|#).*?[\r\n]+)/,'')
     end
 
-    comment "\n\n== scriptlets data structure:"
     require 'pp'
-    comment scriptlets.pretty_print_inspect
+    comment "\n\n== scriptlets data structure:"
+    comment "\n||" + scriptlets.pretty_print_inspect + "||\n"
     scriptlets
   end
 
