@@ -23,10 +23,10 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
   )
     # make sure all generated files from previous rake tasks have
     # permissions that allow the copy in the 'prep' below
-    dist_dirs = Dir.glob(File.join(root_dir, '**', 'dist'))
-    dist_dirs.each { |dir| FileUtils.chmod_R(0755, dir) }
-    FileUtils.chmod_R(0755, 'junit')
-    FileUtils.chmod_R(0755, 'log')
+    # dist_dirs = Dir.glob(File.join(root_dir, '**', 'dist'))
+    # dist_dirs.each { |dir| FileUtils.chmod_R(0755, dir) }
+    # FileUtils.chmod_R(0755, 'junit')
+    # FileUtils.chmod_R(0755, 'log')
     #
     # FIXME: ^^^ Ive faithfully refactored the code above into the helpers, but
     #        it doesn't make sense to me: the file permissions are modified on
@@ -82,7 +82,7 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
           _file  = File.expand_path(log_file, File.dirname(rpm_file))
           _local = File.join(dir, File.basename(log_file))
           comment "\n\n== LOGFILE: #{log_file} [from: #{_file}]\n"
-          result = on(host, "ls #{File.dirname(rpm_file)}")
+          result = on(host, "ls #{File.dirname(rpm_file)}/logs")
           result = on(host, "cat '#{_file}'")
           comment result.stdout
       end
