@@ -79,11 +79,11 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
            logs/build.rpm.out
            logs/build.rpm.err
       ).each do |log_file |
-          _file = File.expand_path(log_file, File.dirname(rpm_file))
+          _file  = File.expand_path(log_file, File.dirname(rpm_file))
           _local = File.join(dir, File.basename(log_file))
-          result = on(host, File.dirname(rpm_file))
-          result = on(host, "cat '#{_file}'")
           comment "\n\n== LOGFILE: #{log_file} [from: #{_file}]\n"
+          result = on(host, "ls #{File.dirname(rpm_file)}")
+          result = on(host, "cat '#{_file}'")
           comment result.stdout
       end
     end
