@@ -80,10 +80,10 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
            logs/build.rpm.err
       ).each do |log_file |
           _from = File.expand_path(log_file, File.dirname(rpm_file))
-          _to   = File.join( dir, log_file )
+          _to   = File.join( dir )
           result = scp_from(host, _from, _to)
           comment "\n\n== LOGFILE: #{log_file}\n"
-          comment File.read( _to )
+          comment File.read( File.join(_to, File.basename(_to)) )
       end
     end
 
