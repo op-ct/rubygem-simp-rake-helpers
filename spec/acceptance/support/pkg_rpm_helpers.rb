@@ -81,13 +81,9 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
       ).each do |log_file |
           _file = File.expand_path(log_file, File.dirname(rpm_file))
           _local = File.join(dir, File.basename(log_file))
-          result = host.scp_from(_file, dir, run_in_parallel: true)
-
-          comment "\n||" + result.pretty_print_inspect + "||\n"
-          comment "\n\n== LOGFILE: #{log_file} [from: #{_file}, to: #{_local} #\n"
-
-          comment "\n\n== LOGFILE: #{log_file} [from: #{_file}, to: #{_local} #\n"
-          comment File.read(_local)
+          result = on(host, "cat '#{_file}'")
+          comment "\n\n== LOGFILE: #{log_file} [from: #{_file}]\n"
+          comment result.stdout
       end
     end
 
