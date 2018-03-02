@@ -80,7 +80,8 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
         _file  = File.expand_path(log_file, File.dirname(rpm_file))
         comment "\n\n== LOGFILE: #{log_file} [from: #{_file}]\n"
         result = on(host, "cat '#{_file}'")
-        comment result.pretty_print_inspect
+        require 'pp'
+        pp result
     end
 
     comment "Verify RPM version\n\t(FIXME: this is to aid troubleshooting within Travis CI―remove when done!)"
