@@ -83,7 +83,7 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
           _to   = File.join( dir )
           result = scp_from(host, _from, _to)
           comment "\n\n== LOGFILE: #{log_file}\n"
-          comment File.read( File.join(_to, File.basename(_to)) )
+          comment File.read( File.join(_to, File.basename(log_file)) )
       end
     end
 
