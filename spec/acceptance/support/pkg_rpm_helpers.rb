@@ -70,6 +70,12 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
 
 
     comment "\n\n\n===== RPM LOGS\n"
+        result = on(host, %Q[#{run_cmd} "cd #{_proj_home}; bundle show simp-rake-helpers"])
+        result = on(host, %Q[#{run_cmd} "cd #{_proj_home}; bundle exec gem specification simp-rake-helpers"])
+        result = on(host, %Q[#{run_cmd} "gem specification simp-rake-helpers; :"])
+        result = on(host, %Q[#{run_cmd} "cd #{_proj_home}; ruby  -e \"require 'simp/rake/helpers/version'; puts '== Simp::Rake::Helpers::VERSION:  ' + Simp::Rake::Helpers::VERSION.to_s\""])
+        result = on(host, %Q[#{run_cmd} "cd #{_proj_home}; bundle exec ruby  -e \"require 'simp/rake/helpers/version'; puts '== Simp::Rake::Helpers::VERSION:  ' + Simp::Rake::Helpers::VERSION.to_s\""])
+
     result = on(host, "ls -lart #{File.dirname(rpm_file)}/logs")
     %w(
          logs/build.srpm.out
@@ -78,6 +84,7 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
          logs/build.rpm.err
     ).each do |log_file |
         _file  = File.expand_path(log_file, File.dirname(rpm_file))
+        _proj_home = File.dirname(File.dirname(rpm_file)
         comment "\n\n== LOGFILE: #{log_file} [from: #{_file}]\n"
         result = on(host, "cat '#{_file}'")
         require 'pp'
