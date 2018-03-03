@@ -74,8 +74,8 @@ module Simp::BeakerHelpers::SimpRakeHelpers::PkgRpmHelpers
         result = on(host, %Q[#{run_cmd} "cd #{_proj_home}; bundle show simp-rake-helpers"])
         result = on(host, %Q[#{run_cmd} "cd #{_proj_home}; bundle exec gem specification simp-rake-helpers"])
         result = on(host, %Q[#{run_cmd} "gem specification simp-rake-helpers; :"])
-        result = on(host, %Q[#{run_cmd} "cd #{_proj_home}; ruby  -e \"require 'simp/rake/helpers/version'; puts '== Simp::Rake::Helpers::VERSION:  ' + Simp::Rake::Helpers::VERSION.to_s\""])
-        result = on(host, %Q[#{run_cmd} "cd #{_proj_home}; bundle exec ruby  -e \"require 'simp/rake/helpers/version'; puts '== Simp::Rake::Helpers::VERSION:  ' + Simp::Rake::Helpers::VERSION.to_s\""])
+        result = on(host, %Q[#{run_cmd} "cd #{_proj_home}; ruby  -e \\\"require 'simp/rake/helpers/version'; puts '== Simp::Rake::Helpers::VERSION:  ' + Simp::Rake::Helpers::VERSION.to_s\\\""])
+        result = on(host, %Q[#{run_cmd} "cd #{_proj_home}; bundle exec ruby  -e \\\"require 'simp/rake/helpers/version'; puts '== Simp::Rake::Helpers::VERSION:  ' + Simp::Rake::Helpers::VERSION.to_s\\\""])
 
     result = on(host, "ls -lart #{File.dirname(rpm_file)}/logs")
     %w(
