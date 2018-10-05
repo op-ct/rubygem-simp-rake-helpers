@@ -1,3 +1,7 @@
+### 5.6.2 / 2018-10-02
+* Add information about the distribution OS to the simp-packer `vars.json`.
+* Refactor writing the vars.json to its own method.
+
 ### 5.6.1 / 2018-10-01
 * Ensure that modules do not contain symlinks per the standard Puppet guidance.
 * Do not try to only use the system cache for yum operations since this

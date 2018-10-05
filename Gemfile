@@ -13,6 +13,8 @@ gem 'ruby-progressbar'
 gem 'simp-build-helpers'
 gem 'simp-beaker-helpers'
 gem 'beaker-puppet_install_helper'
+gem 'rubocop', '~> 0.57.0' # supports ruby 2.1
+gem 'rubocop-rspec'
 
 if puppetversion
   gem 'puppet', puppetversion

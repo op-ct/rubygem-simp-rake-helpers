@@ -102,7 +102,7 @@ module Simp::Rake::Build
           - SIMP_BUILD_staging_dir    => Path to stage big build assets
                                          [Default: './SIMP_ISO_STAGING']
           - SIMP_BUILD_rm_staging_dir => 'no' do not forcibly remove the staging dir before starting
-          - SIMP_BUILD_overlay        => 'no' uses an existing DVD overlay if found 
+          - SIMP_BUILD_overlay        => 'no' uses an existing DVD overlay if found
           - SIMP_BUILD_force_dirty    => 'yes' tries to checks out subrepos even if dirty
           - SIMP_BUILD_docs           => 'yes' builds & includes documentation
           - SIMP_BUILD_checkout       => 'no' will skip the git repo checkouts
@@ -113,7 +113,6 @@ module Simp::Rake::Build
           - SIMP_BUILD_iso_name       => Renames the output ISO filename [Default: false]
           - SIMP_BUILD_iso_tag        => Appended to the output ISO's filename [Default: false]
           - SIMP_BUILD_verbose        => 'yes' enables verbose reporting. [Default: 'no']
-          - SIMP_BUILD_packer_vars    => Write a packer vars.json to go with this ISO [Default: 'yes']
           - SIMP_BUILD_signing_key    => The name of the GPG key to use to sign packages. [Default: 'dev']
         EOM
 
@@ -139,7 +138,6 @@ module Simp::Rake::Build
           target_release   = args[:release]
           do_checksum      = (args.do_checksum = ~ /^$/ ? 'false' : args.do_checksum)
           key_name         = args[:key_name]
-          do_packer_vars   = ENV.fetch('SIMP_BUILD_packer_vars', 'yes') == 'yes'
           verbose          = ENV.fetch('SIMP_BUILD_verbose', 'no') == 'yes'
           prompt           = ENV.fetch('SIMP_BUILD_prompt', 'yes') != 'no'
           method           = ENV.fetch('SIMP_BUILD_puppetfile','tracking')
@@ -412,34 +410,7 @@ module Simp::Rake::Build
             FileUtils.mkdir_p File.dirname(iso), :verbose => verbose
             FileUtils.mv(@simp_output_iso, iso, :verbose => verbose)
 
-            # write vars.json for packer build
-            # --------------------------------------
-            vars_file = iso.sub(/.iso$/, '.json')
-            puts
-            puts '='*80
-            puts "#### Checksumming #{iso}..."
-            puts '='*80
-            puts
-
-            sum = `sha256sum "#{iso}"`.split(/ +/).first
-
-            puts
-            puts '='*80
-            puts "#### Writing packer data to:"
-            puts "       '#{vars_file}'"
-            puts '='*80
-            puts
-            box_distro_release = "SIMP-#{target_release}-#{File.basename(target_data['isos'].first).sub(/\.iso$/,'').sub(/-x86_64/,'')}"
-            packer_vars = {
-              'box_simp_release'   => target_release,
-              'box_distro_release' => box_distro_release,
-              'iso_url'            => iso,
-              'iso_checksum'       => sum,
-              'iso_checksum_type'  => 'sha256',
-              'new_password'       => 'suP3rP@ssw0r!suP3rP@ssw0r!suP3rP@ssw0r!',
-              'output_directory'   => './OUTPUT',
-            }
-            File.open(vars_file, 'w'){|f| f.puts packer_vars.to_json }
+            write_packer_vars_json( iso, target_release, target_data )
 
             puts
             puts '='*80
@@ -556,6 +527,44 @@ module Simp::Rake::Build
           sleep 10
         end
         FileUtils.mkdir_p staging_dir, :verbose => verbose
+      end
+
+
+      def write_packer_vars_json( iso, target_release, target_data )
+        # write vars.json for packer build
+        # --------------------------------------
+        vars_file = iso.sub(/.iso$/, '.json')
+        puts
+        puts '='*80
+        puts "#### Checksumming #{iso}..."
+        puts '='*80
+        puts
+
+        sum = `sha256sum "#{iso}"`.split(/ +/).first
+
+        puts
+        puts '='*80
+        puts "#### Writing packer data to:"
+        puts "       '#{vars_file}'"
+        puts '='*80
+        puts
+        box_distro_release = "SIMP-#{target_release}-" + \
+          File.basename(target_data['isos'].first).sub(/\.iso$/,'').sub(/-x86_64/,'')
+
+        packer_vars = {
+          'box_simp_release'    => target_release,
+          'box_distro_release'  => box_distro_release,
+          'iso_url'             => iso,
+          'iso_checksum'        => sum,
+          'iso_checksum_type'   => 'sha256',
+          'new_password'        => 'suP3rP@ssw0r!suP3rP@ssw0r!suP3rP@ssw0r!',
+          'output_directory'    => './OUTPUT',
+          'dist_os_flavor'      => target_data['flavor'],
+          'dist_os_version'     => target_data['os_version'],
+          'dist_os_maj_version' => target_data['os_version'].split('.').first,
+          'dist_source_isos'    => target_data['isos'].map{|x| File.basename(x)}.join(':'),
+        }
+        File.open(vars_file, 'w'){|f| f.puts packer_vars.to_json }
       end
     end
   end
