@@ -127,7 +127,7 @@ module Simp::Rake::Build
               fail("Could not find GPG keydir '#{key_dir}' in '#{Dir.pwd}'") unless File.directory?(key_dir)
             else
               mkdir('dev') unless File.directory?('dev')
-              chmod(0700,'dev')
+              chmod(0o700,'dev')
               gpg_agent = Simp::GPGAgent.new(File.join(dir,'dev'),@verbose).ensure
 
               Dir.chdir(key_dir) do

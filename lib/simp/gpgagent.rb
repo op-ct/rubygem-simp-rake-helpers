@@ -1,5 +1,5 @@
 require 'securerandom'
-require 'rake/file_utils'
+require 'rake'
 
 module Simp
   # Manage a development GPG key + GPG agent
@@ -75,46 +75,26 @@ module Simp
         write_genkey_parameter_file
         write_gpg_agent_script
 
-        # TODO: Test this with:
-        # 1. Fresh checkout: no GPG_AGENT_INFO and no gpg_agent_env_file
-        #      should be nil
-        # 2. Fresh checkout w/env: GPG_AGENT_INFO, but no gpg_agent_env_file
-        #      should be GPG_AGENT_INFO
-        # 3. Rerun: no GPG_AGENT_INFO, gpg_agent_env_file exists
-        #      should be gpg_agent_env_file
-        # 4. Rerun+env: no GPG_AGENT_INFO, no gpg_agent_env_file
-        #      should be gpg_agent_env_file
-        agent_info = gpg_agent_info
         begin
-          unless agent_info
-            gpg_agent_output = %x(./#{@gpg_agent_script}).strip
-            agent_info = gpg_agent_info
+          gpg_agent_output = %x(./#{@gpg_agent_script}).strip
+          agent_info = gpg_agent_info
 
             if gpg_agent_output.empty?
-              # This is a working version of gpg-agent, that means we need to
-              # connect to it to figure out what's going on
-
-              # FIXME: convert to agent_info
-              gpg_agent_socket = %(#{Dir.pwd}/S.gpg-agent)
-              gpg_agent_pid_info = %x(gpg-agent --homedir=#{Dir.pwd} /get serverpid).strip
-              gpg_agent_pid_info =~ %r{\[(\d+)\]}
-              gpg_agent_pid = Regexp.last_match(1)
-            else
-              # Are we running a broken version of the gpg-agent? If so, we'll
-              # get back info on the command line.
-              unless File.exist?(File.join(Dir.pwd, File.basename(agent_info[:socket])))
-                ### This was the original target, but it doesn't make sense to me:
-                ### local_target = %(#{Dir.pwd}/#{File.basename(agent_info[:pid])})
-                local_target = File.join(Dir.pwd, 'S.gpg-agent')
-                ln_s(agent_info[:socket], local_target, :verbose => @verbose)
-              end
+              raise 'WTF'
             end
-          end
+            # get back info on the command line.
+            unless File.exist?(File.join(Dir.pwd, File.basename(agent_info[:socket])))
+              ### This was the original target, but it doesn't make sense to me:
+              ### local_target = %(#{Dir.pwd}/#{File.basename(agent_info[:pid])})
+              local_target = File.join(Dir.pwd, 'S.gpg-agent')
+              ln_s(agent_info[:socket], local_target, :verbose => @verbose)
+            end
 
           generate_key(agent_info[:info])
         ensure
           kill_agent(agent_info[:pid])
         end
+        agent_info
       end
     end
 
@@ -139,11 +119,6 @@ module Simp
 
     # Return a data structure from a gpg-agent env-file formatted string.
     #
-    #   A typical env-file reads like:
-    #
-    #   ```sh
-    #   GPG_AGENT_INFO=/tmp/gpg-4yhfOB/S.gpg-agent:15495:1; export GPG_AGENT_INFO;\n"
-    #   ```
     def parse_gpg_agent_info_env(str)
       info    = %r{^(GPG_AGENT_INFO=)?(?<info>[^;]+)}.match(str)[:info]
       matches = %r{^(?<socket>[^:]+):(?<pid>[^:]+)}.match(info)

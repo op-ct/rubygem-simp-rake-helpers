@@ -1,0 +1,50 @@
+HOSTS:
+  el6-build-server:
+    roles:
+      - default
+      - master
+      - agent
+      - build_server
+    platform: el-6-x86_64
+    hypervisor: docker
+    image: centos:6
+    docker_image_commands:
+      - 'yum install -y epel-release'
+      - "echo 'Defaults:build_user !requiretty' >> /etc/sudoers"
+      - "echo 'build_user ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers"
+      - 'useradd -b /home -m -c "Build User" -s /bin/bash -U build_user'
+      - 'yum install -y rpm-build createrepo gnupg2 rpmdevtools which'
+    mount_folders:
+      folder1:
+        host_path: ./
+        container_path: /host_files
+    docker_preserve_image: true
+
+  el7-build-server:
+    roles:
+      - build_server
+    platform: el-7-x86_64
+    hypervisor: docker
+    image: centos:7
+    docker_cmd: '/sbin/sshd; tail -f /dev/null'
+    docker_image_commands:
+      - 'yum install -y epel-release'
+      - 'ln -sf /bin/true /usr/bin/systemctl'
+      - "echo 'Defaults:build_user !requiretty' >> /etc/sudoers"
+      - "echo 'build_user ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers"
+      - 'useradd -b /home -m -c "Build User" -s /bin/bash -U build_user'
+      - 'yum install -y rpm-build createrepo gnupg2 rpmdevtools which'
+    mount_folders:
+      folder1:
+        host_path: ./
+        container_path: /host_files
+    docker_preserve_image: true
+    ssh:
+      password: root
+      auth_methods:
+        - password
+
+CONFIG:
+  log_level: verbose
+  type:      foss
+
