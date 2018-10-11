@@ -1,7 +1,7 @@
 #!/usr/bin/rake -T
 
 require 'simp/yum'
-require 'simp/gpgagent'
+require 'simp/local_gpg_signing_key.rb'
 require 'simp/rake/pkg'
 require 'simp/rake/build/constants'
 require 'simp/rake/build/rpmdeps'
@@ -107,44 +107,63 @@ module Simp::Rake::Build
         end
 
         desc <<-EOM
-          Prepare the GPG key space for a SIMP build.
+          Prepare a GPG signing key to sign build packages
 
-          If passed anything but 'dev', will fail if the directory is not present in
-          the 'build/build_keys' directory.
+            * :key - the name of the directory under build/build_keys to
+                     prepare (defaults to 'dev')
+
+          When :key is `dev`, a temporary signing key is created, if needed:
+
+            - A 14-day `dev` key will be created if none exists, including:
+              - The `<build_dir>/build_keys/dev/` dir
+              - gpgagent assets to create/update the key
+
+          When :key is *not* `dev`, the logic is much stricter:
+
+            - You must already have create `<build_dir>/build_keys/<:key>/`
+              directoy, and placed a valid GPG signing key inside
+            - If the directory or key are missing, the task will fail.
 
           ENV vars:
             - Set `SIMP_PKG_verbose=yes` to report file operations as they happen.
         EOM
         task :key_prep,[:key] => [:prep] do |t,args|
           args.with_defaults(:key => 'dev')
-          key_dir = args.key
-          target_dir = @dvd_src
+          key = args.key
+          build_keys_dir = File.join(@build_dir, 'build_keys')
+          key_dir = File.join(build_keys_dir,key)
+          dvd_dir = @dvd_src
 
-          FileUtils.mkdir_p("#{@build_dir}/build_keys")
+          FileUtils.mkdir_p build_keys_dir
 
-          Dir.chdir("#{@build_dir}/build_keys") do |dir|
-            unless key_dir == 'dev'
-              fail("Could not find GPG keydir '#{key_dir}' in '#{Dir.pwd}'") unless File.directory?(key_dir)
+          Dir.chdir(build_keys_dir) do
+            if key == 'dev'
+              Simp::LocalGpgSigningKey.new(key_dir,{verbose: @verbose}).ensure_key
             else
-              mkdir('dev') unless File.directory?('dev')
-              chmod(0o700,'dev')
-              gpg_agent = Simp::GPGAgent.new(File.join(dir,'dev'),@verbose).ensure
+              unless File.directory?(key_dir)
+                fail("Could not find GPG keydir '#{key_dir}' in '#{Dir.pwd}'")
+              end
+            end
 
-              Dir.chdir(key_dir) do
-                rpm_build_keys = Dir.glob('RPM-GPG-KEY-*')
-                fail("Could not find any RPM-GPG-KEY files in '#{Dir.pwd}'") if rpm_build_keys.empty?
+            Dir.chdir(key_dir) do
+              rpm_build_keys = Dir.glob('RPM-GPG-KEY-*')
+              if rpm_build_keys.empty?
+                fail("Could not find any RPM-GPG-KEY-* files in '#{key_dir}'")
+              end
 
-                # Drop the development key in the root of the ISO for convenience
-                if key_dir == 'dev'
-                  fail("Could not find directory '#{target_dir}'") unless File.directory?(target_dir)
-                  rpm_build_keys.each do |gpgkey|
-                    cp(gpgkey,target_dir, :verbose => @verbose)
-                  end
-                # Otherwise, make sure it isn't present for the build
-                else
-                  Dir.glob(File.join(@dvd_src,'RPM-GPG-KEY-SIMP*')).each do |to_del|
-                    rm(to_del)
-                  end
+              # Copy development keys into the root of the ISO for convenience
+              if key == 'dev'
+                unless File.directory?(dvd_dir)
+                  fail("Could not find DVD ISO root directory '#{dvd_dir}'")
+                end
+
+                rpm_build_keys.each do |gpgkey|
+                  cp(gpgkey, dvd_dir, :verbose => @verbose)
+                end
+              # Otherwise, make sure it isn't present for the build
+              else
+                Dir[File.join(dvd_dir,'RPM-GPG-KEY-SIMP*')].each do |to_del|
+                  rm(to_del)
                 end
               end
             end
