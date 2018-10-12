@@ -198,7 +198,7 @@ module Simp
       { info: info.strip, socket: matches[:socket], pid: matches[:pid].to_i }
     end
 
-    # Write the `gpg --genkey --batch` control parameters file
+    # Write the `gpg --genkey --batch` control parameter file
     #
     # @see "Unattended key generation" in /usr/share/doc/gnupg2-*/DETAILS for
     #   documentation on the command parameters format
