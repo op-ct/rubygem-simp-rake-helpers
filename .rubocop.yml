@@ -7,6 +7,8 @@ AllCops:
     - 'scripts/**/*.rb'
     - 'lib/**/*.rb'
     - 'spec/lib/**/*.rb'
+    - 'spec/lib/**/*.rb.beaker-only'
+    - 'spec/acceptance/**/*.rb'
   Exclude:
     - files/**/*
     - vendor/**/*
