@@ -1,3 +1,7 @@
+### 5.6.4 / 2018-11-07
+
+* Enable `Simp::LocalGpgSigningKey` to set the number of days before expiration
+
 ### 5.6.3 / 2018-10-30
 * Add information about the distribution OS to the simp-packer `vars.json`.
 * Add builder version information to the simp-packer `vars.json`.

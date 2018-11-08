@@ -59,13 +59,13 @@ describe Simp::LocalGpgSigningKey do
     it 'reuses an unexpired local gpg signing key' do
       expect{described_class.new(TMP_DEV_DIR,OPTS).ensure_key}.to output(
         /^GPG key \(gatekeeper@simp\.development\.key\) will expire in 14 days\./
-      ).to_stdout
+      ).to_stdout_from_any_process
     end
 
     it 'reuses an unexpired local gpg signing key' do
       expect{described_class.new(TMP_DEV_DIR,OPTS).ensure_key}.to output(
         /^GPG key \(gatekeeper@simp\.development\.key\) will expire in 14 days\./
-      ).to_stdout
+      ).to_stdout_from_any_process
     end
   end
 
@@ -91,6 +91,17 @@ describe Simp::LocalGpgSigningKey do
       let(:agent_info){ SECOND_RUN_AGENT_INFO }
       it_behaves_like 'it encountered an unexpired local gpg signing key'
       it_behaves_like 'a valid gpg signing key environment'
+    end
+
+    context 'with a custom expiration date (51 days)' do
+      it 'expires in 51 days' do
+        opts    = OPTS.merge(days: 51)
+        dev_dir = File.join(TMP_DIR,'dev_51_days')
+        mkdir_p dev_dir
+        expect{described_class.new(dev_dir,opts).ensure_key}.to output(
+          /This key will expire on #{Date.today+51}/
+        ).to_stderr_from_any_process
+      end
     end
   end
 end

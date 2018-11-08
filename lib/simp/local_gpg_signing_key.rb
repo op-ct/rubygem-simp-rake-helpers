@@ -65,6 +65,7 @@ module Simp
     # @option opts [String]  :label         Defaults to the basename of `dir` (dev)
     # @option opts [String]  :email         (gatekeeper@simp.development.key)
     # @option opts [String]  :file          Default based on label (RPM-GPG-KEY-SIMP-Dev)
+    # @option opts [String]  :days          Lifespan of GPG key (default: 14 days)
     # @option opts [Boolean] :verbose       (false)
     #
     def initialize(dir = 'dev', opts = {})
@@ -73,6 +74,7 @@ module Simp
       @key_email = opts[:email]   || 'gatekeeper@simp.development.key'
       @key_file  = opts[:file]    || "RPM-GPG-KEY-SIMP-#{@label.capitalize}"
       @verbose   = opts[:verbose] || false
+      @key_days  = opts[:days]    || 14
 
       @gpg_agent_env_file = 'gpg-agent-info.env'
       @gpg_agent_script   = 'run_gpg_agent'
@@ -231,7 +233,7 @@ module Simp
     #   documentation on the command parameters format
     def write_genkey_parameter_file
       now               = Time.now.to_i.to_s
-      expire_date       = Date.today + 14
+      expire_date       = Date.today + @key_days
       passphrase        = SecureRandom.base64(500)
       genkey_parameters = <<-GENKEY_PARAMETERS.gsub(%r{^ {8}}, '')
         %echo Generating Development GPG Key
@@ -244,7 +246,7 @@ module Simp
         Name-Real: SIMP Development
         Name-Comment: Development key #{now}
         Name-Email: #{@key_email}
-        Expire-Date: 2w
+        Expire-Date: #{@key_days}
         Passphrase: #{passphrase}
         %pubring pubring.gpg
         %secring secring.gpg
