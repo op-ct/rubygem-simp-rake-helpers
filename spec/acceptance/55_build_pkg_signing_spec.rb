@@ -91,7 +91,8 @@ describe 'rake pkg:signrpms' do
 
   shared_examples 'it signs RPM packages in the directory using the GPG dev signing key' do
     it 'signs RPM packages in the directory using the GPG dev signing key' do
-      on(hosts, %(#{run_cmd} "cd '#{test_dir}'; bundle exec rake pkg:signrpms[dev,'#{rpms_dir}']"), opts)
+      rake_opts = opts.merge(extra_opts || {}) # extra beaker opts for the rake command
+      on(hosts, %(#{run_cmd} "cd '#{test_dir}'; bundle exec rake pkg:signrpms[dev,'#{rpms_dir}']"), rake_opts)
       rpms_after_signing = on(hosts, %(#{run_cmd} "rpm -qip '#{test_rpm}' | grep ^Signature"), opts)
       rpms_after_signing.each do |result|
         host = hosts_with_name(hosts, result.host).first
@@ -111,6 +112,14 @@ describe 'rake pkg:signrpms' do
     include_examples('it signs RPM packages in the directory using the GPG dev signing key')
 
     context 'when there is an unexpired GPG dev signing key' do
+      include_examples('it begins with unsigned RPMs')
+      include_examples('it signs RPM packages in the directory using the GPG dev signing key')
+    end
+
+    context 'when there is a custom key expiration (3 days)' do
+      let(:extra_opts){{:environment => {'SIMP_PKG_dev_key_days'=>'3'}}}
+      include_context('a freshly-scaffolded test project', 'pkg-signrpms')
+      include_examples('it creates a new GPG dev signing key')
       include_examples('it begins with unsigned RPMs')
       include_examples('it signs RPM packages in the directory using the GPG dev signing key')
     end
@@ -137,4 +146,5 @@ describe 'rake pkg:signrpms' do
     include_examples('it begins with unsigned RPMs')
     include_examples('it signs RPM packages in the directory using the GPG dev signing key')
   end
+
 end

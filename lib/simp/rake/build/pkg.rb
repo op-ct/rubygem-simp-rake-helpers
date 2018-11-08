@@ -120,12 +120,13 @@ module Simp::Rake::Build
 
           When :key is *not* `dev`, the logic is much stricter:
 
-            - You must already have create `<build_dir>/build_keys/<:key>/`
-              directoy, and placed a valid GPG signing key inside
+            - You must already have created the `<build_dir>/build_keys/<:key>/`
+              directory, and placed a valid GPG signing key inside
             - If the directory or key are missing, the task will fail.
 
           ENV vars:
             - Set `SIMP_PKG_verbose=yes` to report file operations as they happen.
+            - Set `SIMP_PKG_dev_key_days=<number>` to change the expiration of the `dev` key.
         EOM
         task :key_prep,[:key] => [:prep] do |t,args|
           args.with_defaults(:key => 'dev')
@@ -138,7 +139,9 @@ module Simp::Rake::Build
 
           Dir.chdir(build_keys_dir) do
             if key == 'dev'
-              Simp::LocalGpgSigningKey.new(key_dir,{verbose: @verbose}).ensure_key
+              gpg_opts = {:verbose => @verbose}
+              gpg_opts[:days] = ENV['SIMP_PKG_dev_key_days'].to_i || 14
+              Simp::LocalGpgSigningKey.new(key_dir,gpg_opts).ensure_key
             else
               unless File.directory?(key_dir)
                 fail("Could not find GPG keydir '#{key_dir}' in '#{Dir.pwd}'")
