@@ -32,7 +32,7 @@ jobs:
       services:
         - docker
       script:
-        - travis_wait 90 unbuffer bundle exec rake acceptance
+        - unbuffer travis_wait 90 bundle exec rake acceptance
 
     - stage: deploy
       rvm: 2.5.1
