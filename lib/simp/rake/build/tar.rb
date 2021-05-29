@@ -89,14 +89,12 @@ module Simp::Rake::Build
           end
         end
 
-=begin
         desc <<-EOM
           Build the DVD tarball(s).
 
             * :key - What key to use for signing the RPMs
-            * :docs - Whether or not to build the documentation
+            * :docs - Whether or not to build the documentation (default: true)
         EOM
-=end
         task :build,[:key,:docs] => ['pkg:build','pkg:checksig','tar:validate'] do |t,args|
           args.with_defaults(:docs => 'true')
 

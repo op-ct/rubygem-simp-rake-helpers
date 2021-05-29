@@ -93,20 +93,18 @@ module Simp::Rake::Build
           end
         end # End of prune_packages
 
-=begin
-        desc <<-EOM
-      Build the SIMP ISO(s).
-       * :tarball - Path of the source tarball or directory containing the source
-           tarballs.
-       * :unpacked_dvds - Path of the directory containing the unpacked base OS
-           directories. Default is the current directory.
-       * :prune - Flag for whether unwanted packages should be pruned prior to
-           building the ISO. Default is true.
+        desc <<~EOM
+          Build the SIMP ISO(s).
+           * :tarball - Path of the source tarball or directory containing the source
+               tarballs.
+           * :unpacked_dvds - Path of the directory containing the unpacked base OS
+               directories. Default is the current directory.
+           * :prune - Flag for whether unwanted packages should be pruned prior to
+               building the ISO. Default is true.
 
-       ENV vars:
-         - Set `SIMP_ISO_verbose=yes` to report file operations as they happen.
-           EOM
-=end
+          ENV vars:
+            - Set `SIMP_ISO_verbose=yes` to report file operations as they happen.
+        EOM
         task :build,[:tarball,:unpacked_dvds,:prune] => [:prep] do |t,args|
           args.with_defaults(:unpacked_dvds => "#{@run_dir}", :prune => 'true')
 
