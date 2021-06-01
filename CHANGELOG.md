@@ -1,3 +1,6 @@
+### 5.13.0 / 2021-06-01
+- Change things
+
 ### 5.12.1 / 2021-05-27
 - Default `@build_dir` to `@distro_build_dir` in build tasks
 - Use  `file --keep-going` in the **unpack** task's ISO validation check.  This
