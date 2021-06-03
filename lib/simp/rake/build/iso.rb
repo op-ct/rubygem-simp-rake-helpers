@@ -1,8 +1,10 @@
 require 'simp/rake'
 require 'simp/rake/build/constants'
+require 'simp/build/iso/tree_info_reader'
 
 module Simp; end
 module Simp::Rake; end
+
 module Simp::Rake::Build
 
   class Iso < ::Rake::TaskLib
@@ -141,43 +143,19 @@ module Simp::Rake::Build
 
             # Process each unpacked base OS ISO directory found
             iso_dirs.each do |dir|
-              baseosver = '???'
-              arch      = '???'
+              treeinfo = Simp::Build::Iso::TreeInfoReader.new("#{dir}/.treeinfo")
+              rel_name = treeinfo.release_short_name || '???'
+              arch = treeinfo.tree_arch || '???'
+              baseosver = treeinfo.release_version || '???'
+              baseosver += '.0' if (baseosver.count('.') < 1)
+              baseosmajver = baseosver.split('.').first
 
-              # read the .treeinfo file (INI format)
-              # ------------------------------------
-              require 'puppet'
-              require 'puppet/util/inifile'
-
-              file = "#{dir}/.treeinfo"
-              fail("ERROR: no file '#{file}'") unless File.file?(file)
-
-              ini = Puppet::Util::IniConfig::PhysicalFile.new(file)
-              ini.read
-
-              # TODO header + version check
-              # TODO only use general section for EL7
-              # TODO set baseosver and arch for EL8
-              # NOTE: RHEL7 discs claim [general] section is deprecated.
-              if sections.include?('general')
-                h = Hash[ ini.get_section('general').entries.map{|k,v| [k,v]} ]
-                arch      = h.fetch('arch', arch).strip
-                orig_baseosver = h.fetch('version', baseosver).strip
-                baseosver = orig_baseosver
-                baseosver += '.0' if (baseosver.count('.') < 1)
-              end
-
-              # 
-              if ['CentOS Linux'].include?(h['family'])
-                if orig_baseosver[0] >= '8'
-                  # Read EL8 .treeinfo format
-                  variant_names = ini.get_section('general').entries.select{|e| e[0] == 'variants' }.first.last.split(',')
-                  variants = ini.sections.select do |s|
-                    s.entries.reject{|x| x.class != Array}.to_h['type'] == 'variant'
-                  end.map do |v|
-                     v.entries.reject{|x| x.class != Array}.to_h
-                  end
-                  variants.each do |v|
+              # TODO instead of removing here, filter during unpack?
+              if ['CentOS Linux'].include?(rel_name)
+                if baseosmajver >= '8'
+          require 'pry'; binding.pry
+                  treeinfo.variants.each do |k,v|
+          require 'pry'; binding.pry
                     warn "== Removing .treeinfo variant '#{v['name']}'..."
                     puts "rm_rf #{v['packages']}"
                   end
