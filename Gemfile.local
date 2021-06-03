@@ -1,0 +1,5 @@
+group :development do
+  gem 'guard-rspec'
+end
+
+# vim: set filetype=ruby
