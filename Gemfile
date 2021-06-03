@@ -22,3 +22,12 @@ if puppetversion
   gem 'puppet', puppetversion
 end
 
+# Evaluate Gemfile.local and ~/.gemfile if they exist
+[
+  "#{__FILE__}.local",
+  File.join(Dir.home, '.gemfile'),
+].each do |gemfile|
+  if File.file?(gemfile) && File.readable?(gemfile)
+    eval(File.read(gemfile), binding)
+  end
+end
