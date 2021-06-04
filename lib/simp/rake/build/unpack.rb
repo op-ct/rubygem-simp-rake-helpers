@@ -14,43 +14,14 @@ module Simp::Rake::Build
       define_tasks
     end
 
+
     def define_tasks
-      #!/usr/bin/rake -T
 
-      desc "Unpack an ISO. Unpacks either a RHEL or CentOS ISO into
-      <targetdir>/<RHEL|CentOS><version>-<arch>.
-       * :iso_path - Full path to the ISO image to unpack.
-       * :merge - If true, then automatically merge any existing
-         directories. Defaults to prompting.
-       * :targetdir - The parent directory for the to-be-created directory
-         containing the unpacked ISO. Defaults to the current directory.
-       * :isoinfo - The isoinfo executable to use to extract stuff from the ISO.
-         Defaults to 'isoinfo'.
-       * :version - optional override for the <version> number (e.g., '7.0' instead of '7')
-
-      "
-      task :unpack,[:iso_path, :merge, :targetdir, :isoinfo, :version] do |t,args|
-        args.with_defaults(
-          :iso_path   => '',
-          :isoinfo    => 'isoinfo',
-          :targetdir  => Dir.pwd,
-          :merge      => false,
-          :version => false,
-        )
-
-        iso_path   = args.iso_path
-        iso_info   = which(args.isoinfo)
-        targetdir  = args.targetdir
-        merge      = args.merge
-        version = args.version
-
-        # Checking for valid arguments
-        File.exist?(args.iso_path) or
-          fail "Error: You must provide the full path and filename of the ISO image."
-
-        %x{file --keep-going '#{iso_path}'}.split(":")[1..-1].to_s =~ /ISO/ or
-          fail "Error: The file provided is not a valid ISO."
-
+      # Determine name for unpack directory from ISO filename
+      #
+      #   e.g., 'CentOS-8.3.2011-x86_64-dvd1.iso' -> 'CentOS8.3.2011-x86_64'
+      #
+      def dirname_from_iso_name(iso_path, version:)
         pieces = File.basename(iso_path,'.iso').split('-')
 
         # Mappings of ISO name to target directory name.
@@ -71,13 +42,53 @@ module Simp::Rake::Build
             'arch'    => pieces[2]
           }
         }
-
         # Determine the target directory
         map = dvd_map[pieces[0]]
         map.nil? and fail "Error: Could not find a mapping for '#{iso_path}'."
-        out_dir = "#{File.expand_path(targetdir)}/#{map['baseos']}#{map['version']}-#{map['arch']}"
+        "#{map['baseos']}#{map['version']}-#{map['arch']}"
+      end
+
+      desc "Unpack an ISO. Unpacks either a RHEL or CentOS ISO into
+      <targetdir>/<RHEL|CentOS><version>-<arch>.
+       * :iso_path - Full path to the ISO image to unpack.
+       * :merge - If true, then automatically merge any existing
+         directories. Defaults to prompting.
+       * :targetdir - The parent directory for the to-be-created directory
+         containing the unpacked ISO. Defaults to the current directory.
+       * :isoinfo - The isoinfo executable to use to extract stuff from the ISO.
+         Defaults to 'isoinfo'.
+       * :version - optional override for the <version> number (e.g., '7.0' instead of '7')
+
+      "
+      task :unpack,[:iso_path, :merge, :targetdir, :isoinfo, :version, :unpack_repos] do |t,args|
+        args.with_defaults(
+          :iso_path   => '',
+          :isoinfo    => 'isoinfo',
+          :targetdir  => Dir.pwd,
+          :merge      => false,
+          :version => false,
+          :unpack_repos => false,
+        )
+
+        iso_path   = args.iso_path
+        iso_info   = which(args.isoinfo)
+        targetdir  = args.targetdir
+        merge      = args.merge
+        version = args.version
+
+        # Checking for valid arguments
+        File.exist?(args.iso_path) or
+          fail "Error: You must provide the full path and filename of the ISO image."
+
+        %x{file --keep-going '#{iso_path}'}.split(":")[1..-1].to_s =~ /ISO/ or
+          fail "Error: The file provided is not a valid ISO."
+
+        # Determine target directory/name
+        unpack_dir_name = dirname_from_iso_name(iso_path,version: version)
+        out_dir = "#{File.expand_path(unpack_dir_name,  targetdir)}"
 
         # Attempt a merge
+        # NOTE: merging modulary repos would destroy the modular metadata
         if File.exist?(out_dir) and merge.to_s.strip == 'false'
           puts "Directory '#{out_dir}' already exists! Would you like to merge? [Yn]?"
           unless $stdin.gets.strip.match(/^(y.*|$)/i)
@@ -91,6 +102,25 @@ module Simp::Rake::Build
 
         # Unpack the ISO
         iso_toc = %x{#{iso_info} -Rf -i #{iso_path}}.split("\n")
+        unless args.unpack_repos
+          unless iso_toc.grep('/.treeinfo').empty?
+            treeinfo_content = %x{#{iso_info} -R -x /.treeinfo -i #{iso_path}}
+            require 'tempfile'
+            treeinfo = Tempfile.create('simp_rake_build_unpack_ini_file') do |ini_file|
+              require 'simp/build/iso/tree_info_reader'
+              ini_file.write(treeinfo_content)
+              ini_file.flush
+              Simp::Build::Iso::TreeInfoReader.new(ini_file.path)
+            end
+            treeinfo.variants.each do |v|
+              warn "Filtering out packages from variant #{v['packages']}"
+              iso_toc.reject!{|i| i =~ %r[^/(#{v['packages']}|#{v['repository']})] }
+              iso_toc.reject!{|i| i =~ %r[^/#{v['repository']}] }
+            end
+          end
+        end
+
+          require 'pry'; binding.pry
         iso_toc.each do |iso_entry|
           iso_toc.delete(File.dirname(iso_entry))
         end
