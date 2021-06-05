@@ -52,8 +52,13 @@ module Simp::Build::Iso
 
     # @return [Hash] data for all variants in [tree] section (treeinfo 1.x)
     def variants
-      variant_uids = section('tree')['variants'].to_s.split(',')
-      variant_uids.map { |uid| section("variant-#{uid}") }
+      if @treeinfo_maj_version == 1
+        variant_uids = section('tree')['variants'].to_s.split(',')
+        variant_uids.map { |uid| section("variant-#{uid}") }
+      else
+        # TODO return [general] packages from legacy? (usually empty on CentOS)
+        # TODO What to do for EL7?
+      end
     end
 
     # Determine .treeinfo version string
