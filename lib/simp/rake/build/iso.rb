@@ -98,18 +98,60 @@ module Simp::Rake::Build
           # - FIXME Update productmd .treeinfo with correct tree + variants for all RPM repos
 
           # Make sure we have all of the necessary RPMs!
-          # FIXME include all repos in the repoclosure
-          #Rake::Task['pkg:repoclosure'].invoke(File.expand_path(unpacked_dvd_dir))
 
+
+          # Locate (non-hidden) RPM repositories under the directory tree
           require 'find'
           repo_dirs = []
           Find.find(unpacked_dvd_dir) do |path|
-            next(false) unless File.basename(path) == 'repodata'
+            next unless File.directory?(path)
+            Find.prune if File.basename(path).start_with?('.') # skip hidden
+            next unless File.basename(path) == 'repodata'
             if File.file?(File.join(path,'repomd.xml'))
               repo_dirs << File.dirname(path)
+              Find.prune
             end
           end
+
+          _repoclose_pe = false
+          yum_conf_template = <<~YUM_CONF
+            [main]
+            keepcache=0
+            exactarch=1
+            obsoletes=1
+            gpgcheck=0
+            plugins=1
+            installonly_limit=5
+            <% unless #{_repoclose_pe} -%>
+            exclude=*-pe-*
+            <% end -%>
+          YUM_CONF
+
+          require 'tmpdir'
+          Dir.mktmpdir(['simp','repoclosure']) do |dir|
+            yum_conf = File.join(dir,'yum.conf')
+            File.open(yum_conf, 'w') do |f|
+              f.write(ERB.new(yum_conf_template,nil,'-').result(binding))
+            end
+            cmd = "dnf -v -d9 repoclosure -c '#{yum_conf}' --installroot '#{dir}' "
+            cmd += repo_dirs.map do |path|
+              # Give repoids a unique suffix
+              repoid = File.basename(path) + '.staged'
+               " \\\n  --repofrompath '#{repoid},file://#{path}' \\\n  --repoid '#{repoid}'"
+            end.join(' ')
+            puts c = File.expand_path('_test_repoclosure.sh')
+            File.open(c,'w'){|f| f.puts cmd }
+
+            puts "== Running repoclosure on all repositories"
+            sh cmd
+          end
+
+
+          # FIXME move the code above into:
+          # Rake::Task['pkg:repoclosure'].invoke(File.expand_path(unpacked_dvd_dir))
       require 'pry'; binding.pry
+
+
 
 
 
