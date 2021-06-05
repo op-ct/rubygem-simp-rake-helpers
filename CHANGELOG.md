@@ -1,5 +1,11 @@
 ### 5.13.0 / 2021-06-01
-- Change things
+- Add task **iso:stage:tarball**
+- Add task **iso:stage:local_repos**
+- Remove multiple tarball x baseos ISO matrix from **iso:build**
+- Add treeinfo parser to handle productmd and legacy formats
+- Add EL8 to the build `vermap.yaml`
+- Remove EL6 from the build `vermap.yaml`
+- Add `unpack_repos` argument to **unpack** task to completely ignore OS ISO's packages
 
 ### 5.12.1 / 2021-05-27
 - Default `@build_dir` to `@distro_build_dir` in build tasks
