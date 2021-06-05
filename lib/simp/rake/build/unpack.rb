@@ -223,7 +223,7 @@ module Simp::Rake::Build
               case copy_method
               when 'copy'
                 puts "-- Copying repo dir '#{File.basename(dir)}' into '#{unpacked_dvd_dir}'"
-                FileUtils.cp_r(dir, unpacked_dvd_dir, verbose: verbose )
+                FileUtils.cp_r(dir, unpacked_dvd_dir, verbose: verbose, preserve: true )
               when 'move'
                 puts "-- Moving repo dir '#{File.basename(dir)}' into '#{unpacked_dvd_dir}'"
                 FileUtils.mv(dir, unpacked_dvd_dir, verbose: verbose )
