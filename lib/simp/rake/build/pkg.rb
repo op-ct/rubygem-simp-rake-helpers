@@ -77,6 +77,7 @@ module Simp::Rake::Build
               :in_processes => @cpu_limit,
               :progress => t.name
             ) do |dir|
+              File.exist?(dir) or next
               Dir.chdir(dir) do
                 begin
                   rake_flags = Rake.application.options.trace ? '--trace' : ''
@@ -106,6 +107,7 @@ module Simp::Rake::Build
               :in_processes => @cpu_limit,
               :progress => t.name
             ) do |dir|
+              File.exist?(dir) or next
               Dir.chdir(dir) do
                 rake_flags = Rake.application.options.trace ? '--trace' : ''
                 sh %{rake clobber #{rake_flags}}
