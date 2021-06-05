@@ -99,8 +99,19 @@ module Simp::Rake::Build
 
           # Make sure we have all of the necessary RPMs!
           # FIXME include all repos in the repoclosure
-          Rake::Task['pkg:repoclosure'].invoke(File.expand_path(unpacked_dvd_dir))
+          #Rake::Task['pkg:repoclosure'].invoke(File.expand_path(unpacked_dvd_dir))
+
+          require 'find'
+          repo_dirs = []
+          Find.find(unpacked_dvd_dir) do |path|
+            next(false) unless File.basename(path) == 'repodata'
+            if File.file?(File.join(path,'repomd.xml'))
+              repo_dirs << File.dirname(path)
+            end
+          end
       require 'pry'; binding.pry
+
+
 
           # Do some sane chmod'ing and build ISO
           system("chmod -fR u+rwX,g+rX,o=g #{unpacked_dvd_dir}")
