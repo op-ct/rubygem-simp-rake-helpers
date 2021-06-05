@@ -32,526 +32,110 @@ module Simp::Rake::Build
           end
         end
 
-        # Remove packages from the given directory. The goal of this method is to help
-        # get the distro to be as small as possible.
-        # [:from_dir] Root directory to remove packages from (removes recursively)
-        # [:exclude_dirs] Array of directories to not remove any packages from
-        # [:exclude_pkgs] Array of packages to not remove
-        def prune_packages(from_dir,exclude_dirs,exclude_pkgs,mkrepo='createrepo -p',use_hack=true)
-          $stderr.puts "Starting to prune..."
-          Dir.chdir(from_dir) do
-            prune_count = 0
-
-            Find.find('.') do |path|
-              Find.prune if exclude_dirs.include?(File.basename(path))
-
-              if File.basename(path) =~ /.*\.rpm/
-                # Get the package name from the RPM.
-                # Note: an alternative method may be to just simply check the names
-                # of the RPMs themselves instead of the names of the packages.
-                pkg = nil
-                if use_hack
-                  # The proper way (defined below) is way too slow, so this hack helps
-                  # speed up the process by reading the file directly. If the code is
-                  # not working, attempt this without using the hack, just be ready
-                  # to wait a long time for the code to complete.
-                  pkgname = File.basename(path).split('-').first
-                  File.open(path,'r').each_line do |line|
-                    if encode_line(line) =~ /C\000(\S+\000)?(#{Regexp.escape(pkgname)}\S*)\000/
-                      pkg = $2.split(/\000/).first
-                      break
-                    end
-                  end
-                else
-                  # Proper way to obtain the RPM's package name, but WAY too slow
-                  pkg = %x{rpm -qp --qf "%{NAME}" #{path} 2>/dev/null}.chomp
-                end
-
-                unless exclude_pkgs.include?(pkg)
-                  rm(path, :verbose => verbose)
-                  prune_count += 1
-                end
-              end
-            end
-            $stderr.puts "Info: Pruned #{prune_count} packages from #{from_dir}"
-
-            if prune_count > 0
-              # Recreate the now-pruned repos
-              basepath = '.'
-              if (File.basename(from_dir) =~ /^RHEL/)
-                # This covers old versions of RHEL that don't follow the new
-                # way of doing things.
-                unless Dir.glob("Server/*.rpm").empty?
-                  basepath = 'Server'
-                end
-              end
-
-              Dir.chdir(basepath) do
-                cp(Dir.glob("repodata/*comps*.xml").first,"simp_comps.xml")
-                sh %{#{mkrepo} -g simp_comps.xml .}
-                rm("simp_comps.xml")
-              end
-            end
-          end
-        end # End of prune_packages
-
         desc <<~EOM
           Build the SIMP ISO(s).
-           * :tarball - Path of the source tarball or directory containing the source
-               tarballs.
-           * :unpacked_dvds - Path of the directory containing the unpacked base OS
-               directories. Default is the current directory.
-           * :prune - Flag for whether unwanted packages should be pruned prior to
-               building the ISO. Default is true.
+           * :tarball - Path of the source SIMP tarball
+           * :unpacked_dvd_dir - Path to the unpacked base OS ISO
 
           ENV vars:
             - Set `SIMP_ISO_verbose=yes` to report file operations as they happen.
         EOM
-        task :build2,[:tarball,:unpacked_dvds,:prune] => [:prep] do |t,args|
-          args.with_defaults(:unpacked_dvds => "#{@run_dir}", :prune => 'true')
-
-          if args.tarball.nil?
-            fail("Error: You must specify a source tarball or tarball directory!")
+        task :build2,[:tarball, :unpacked_dvd_dir] => [:prep] do |t,args|
+          # TODO move unpacking the tarball into a separate task, like build:unpack:tar
+          if args.nil?
+            fail("Error: You must specify a source  or tarball directory!")
           end
+
           tarball = File.expand_path(args.tarball)
+          unpacked_dvd_dir = File.expand_path(args.unpacked_dvd_dir)
 
           unless File.exist?(tarball)
-            fail("Error: Could not find tarball at '#{tarball}'!")
+            fail("Error: Could not find tarball file at '#{tarball}'!")
           end
 
-          tarfiles = [tarball]
-          tarfiles = Dir.glob("#{tarball}/*.tar.gz") if File.directory?(tarball)
-          vermap = YAML::load_file( File.join( File.dirname(__FILE__), 'vermap.yaml'))
+          unless File.directory? unpacked_dvd_dir
+            fail("Error: No directory found at #{unpacked_dvd_dir}'")
+          end
 
-          tarfiles.each do |tball|
-            namepieces = File.basename(tarball,".tar.gz").split('-')
+          treeinfo_path = File.join(unpacked_dvd_dir,'.treeinfo')
+          unless File.file? treeinfo_path
+            fail("Error: No .treeinfo found under '#{unpacked_dvd_dir}'.  (Does it really contain an unpacked ISO?)")
+          end
 
-            # SIMP 6
-            if namepieces[1] !~ /^\d/
-              simpver = namepieces[3..-1].join('-')
-              baseos  = namepieces[2]
-            else
-              # Older, maybe unused?
-              simpver = namepieces[1..2].join('-')
-              baseos  = namepieces[3]
-            end
+          vermap = YAML::load_file( File.join( __dir__, 'vermap.yaml'))
+          namepieces = File.basename(tarball,".tar.gz").split('-')
 
-            iso_dirs = Dir.glob("#{File.expand_path(args.unpacked_dvds)}/#{baseos}*")
-            if iso_dirs.empty?
-              fail("Error: No unpacked DVD directories found for '#{baseos}' under '#{File.expand_path(args.unpacked_dvds)}'")
-            end
-
-            # Process each unpacked base OS ISO directory found
-            iso_dirs.each do |dir|
-              treeinfo = Simp::Build::Iso::TreeInfoReader.new("#{dir}/.treeinfo")
-              rel_name = treeinfo.release_short_name || '???'
-              arch = treeinfo.tree_arch || '???'
-              baseosver = treeinfo.release_version || '???'
-              baseosver += '.0' if (baseosver.count('.') < 1)
-              baseosmajver = baseosver.split('.').first
-
-              # TODO instead of removing here, filter during unpack?
-              if ['CentOS Linux'].include?(rel_name)
-                if baseosmajver >= '8'
-          require 'pry'; binding.pry
-                  treeinfo.variants.each do |k,v|
-          require 'pry'; binding.pry
-                    warn "== Removing .treeinfo variant '#{v['name']}'..."
-                    puts "rm_rf #{v['packages']}"
-                  end
-                end
-              end
-
-              # ------------------------------------
-          require 'pry'; binding.pry
-
-              # Skip if SIMP version doesn't match target base OS version
-              unless Array(vermap[simpver.split('.').first]).include?(baseosver.split('.').first)
-                if verbose
-                  warn("Could not find SIMP version mapping for #{simpver} for Base OS #{baseosver}")
-                end
-
-                next
-              end
-          require 'pry'; binding.pry
-
-              mkrepo = baseosver.split('.').first == '5' ? 'createrepo -s sha -p' : 'createrepo -p'
-
-              @simp_dvd_dirs.each do |clean_dir|
-                if File.directory?("#{dir}/#{clean_dir}")
-                  rm_rf("#{dir}/#{clean_dir}", :verbose => verbose)
-                elsif File.file?("#{dir}/#{clean_dir}")
-                  fail("Error: #{dir}/#{clean_dir} is a file, expecting directory!")
-                end
-              end
-
-          require 'pry'; binding.pry
-              # Prune unwanted packages
-              begin
-                system("tar --no-same-permissions -C #{dir} -xzf #{tball} *simp_pkglist.txt")
-              rescue
-                # Does not matter if the command fails
-              end
-
-              pkglist_file = ENV.fetch(
-                'SIMP_PKGLIST_FILE',
-                File.join(dir,"#{baseosver.split('.').first}-simp_pkglist.txt")
-              )
-
-              require 'pry'; binding.pry
-              puts
-              puts '-'*80
-              puts "### Pruning packages not in file '#{pkglist_file}'"
-              puts
-              puts '   (override this with `SIMP_PKGLIST_FILE=<file>`)'
-              puts
-              puts '-'*80
-              puts
-
-              if (args.prune.casecmp("false") != 0) && File.exist?(pkglist_file)
-                exclude_pkgs = Array.new
-                File.read(pkglist_file).each_line do |line|
-                  next if line =~ /^(\s+|#.*)$/
-                  exclude_pkgs.push(line.chomp)
-                end
-                prune_packages(dir,['SIMP'],exclude_pkgs,mkrepo)
-              end
-
-              # Add the SIMP code
-              system("tar --no-same-permissions -C #{dir} -xzf #{tball}")
-
-              Dir.chdir("#{dir}/SIMP") do
-                # Add the SIMP Dependencies
-                simp_base_ver = simpver.split('-').first
-
-                if $simp6
-                  yum_dep_location = File.join(@build_dir,'yum_data','packages')
-                else
-                  simp_dep_src = %(SIMP#{simp_base_ver}_#{baseos}#{baseosver}_#{arch})
-                  yum_dep_location = File.join(@build_dir,'yum_data',simp_dep_src,'packages')
-                end
-
-                unless File.directory?(yum_dep_location)
-                  fail("Could not find dependency directory at #{yum_dep_location}")
-                end
-
-                yum_dep_rpms = Dir.glob(File.join(yum_dep_location,'*.rpm'))
-                if yum_dep_rpms.empty?
-                  fail("Could not find any dependency RPMs at #{yum_dep_location}")
-                end
-
-                # Add any one-off RPMs that you might want to add to your own build
-                # These are *not* checked to make sure that they actually match your
-                # environment
-                aux_packages = File.join(File.dirname(yum_dep_location),'aux_packages')
-                if File.directory?(aux_packages)
-                  yum_dep_rpms += Dir.glob(File.join(aux_packages,'*.rpm'))
-                end
-
-                yum_dep_rpms.each do |rpm|
-                  rpm_arch = rpm.split('.')[-2]
-
-                  unless File.directory?(rpm_arch)
-                    mkdir(rpm_arch)
-                  end
-
-                  # Just in case this is a symlink, broken, or some other nonsense.
-                  target_file = File.join(rpm_arch,File.basename(rpm))
-                  rm_f(target_file) if File.exist?(target_file)
-
-                  cp(rpm,rpm_arch, :verbose => verbose)
-                end
-
-                fail("Could not find architecture '#{arch}' in the SIMP distribution") unless File.directory?(arch)
-                # Get everything set up properly...
-                Dir.chdir(arch) do
-                  Dir.glob('../*') do |rpm_dir|
-                    # Don't dive into ourselves
-                    next if File.basename(rpm_dir) == arch
-
-                    Dir.glob(%(#{rpm_dir}/*.rpm)) do |source_rpm|
-                      link_target = File.basename(source_rpm)
-                      if File.exist?(source_rpm) && File.exist?(link_target)
-                        next if Pathname.new(source_rpm).realpath == Pathname.new(link_target).realpath
-                      end
-
-                      ln_sf(source_rpm,link_target, :verbose => verbose)
-                    end
-                  end
-
-                  fail("Error: Could not run createrepo in #{Dir.pwd}") unless system(%(#{mkrepo} .))
-                end
-              end
-
-              # Make sure we have all of the necessary RPMs!
-              Rake::Task['pkg:repoclosure'].invoke(File.expand_path(dir))
-
-              # Do some sane chmod'ing and build ISO
-              system("chmod -fR u+rwX,g+rX,o=g #{dir}")
-              simp_output_name = "SIMP-#{simpver}-#{baseos}-#{baseosver}-#{arch}"
-              @simp_output_iso = "#{simp_output_name}.iso"
-
-              mkisofs_cmd = [
-                'mkisofs',
-                "-A SIMP-#{simpver}",
-                "-V SIMP-#{simpver}",
-                "-volset SIMP-#{simpver}",
-                '-uid 0',
-                '-gid 0',
-                '-J',
-                '-joliet-long',
-                '-r',
-                '-v',
-                '-T',
-                '-b isolinux/isolinux.bin',
-                '-c boot.cat',
-                '-boot-load-size 4',
-                '-boot-info-table',
-                '-no-emul-boot',
-                '-eltorito-alt-boot',
-                '-e images/efiboot.img',
-                # This is apparently needed twice to get the lines above it to
-                # take. Not sure why.
-                '-no-emul-boot',
-                '-m TRANS.TBL',
-                '-x ./lost+found',
-                "-o #{@simp_output_iso}",
-                dir
-              ]
-
-              system(mkisofs_cmd.join(' '))
-            end
-          end # End of tarfiles loop
-
-          # If we got here and didn't generate any ISOs, something went horribly wrong
-          fail('Error: No ISO was built!') unless @simp_output_iso
-        end
-        desc <<~EOM
-          Build the SIMP ISO(s).
-           * :tarball - Path of the source tarball or directory containing the source
-               tarballs.
-           * :unpacked_dvds - Path of the directory containing the unpacked base OS
-               directories. Default is the current directory.
-           * :prune - Flag for whether unwanted packages should be pruned prior to
-               building the ISO. Default is true.
-
-          ENV vars:
-            - Set `SIMP_ISO_verbose=yes` to report file operations as they happen.
-        EOM
-        task :build,[:tarball,:unpacked_dvds,:prune] => [:prep] do |t,args|
-          args.with_defaults(:unpacked_dvds => "#{@run_dir}", :prune => 'true')
-
-          if args.tarball.nil?
-            fail("Error: You must specify a source tarball or tarball directory!")
+          # SIMP 6
+          if namepieces[1] !~ /^\d/
+            simpver = namepieces[3..-1].join('-')
+            baseos  = namepieces[2]
           else
-            tarball = File.expand_path(args.tarball)
-
-            unless File.exist?(tarball)
-              fail("Error: Could not find tarball at '#{tarball}'!")
-            end
+            # Older, maybe unused?
+            simpver = namepieces[1..2].join('-')
+            baseos  = namepieces[3]
           end
 
-          tarfiles = File.directory?(tarball) ?
-            Dir.glob("#{tarball}/*.tar.gz") : [tarball]
-          vermap = YAML::load_file( File.join( File.dirname(__FILE__), 'vermap.yaml'))
+          treeinfo = Simp::Build::Iso::TreeInfoReader.new(treeinfo_path)
+          rel_name = treeinfo.release_short_name || '???'
+          arch = treeinfo.tree_arch || '???'
+          baseosver = treeinfo.release_version || '???'
+          baseosver += '.0' if (baseosver.count('.') < 1)
 
-          tarfiles.each do |tball|
-            namepieces = File.basename(tarball,".tar.gz").split('-')
+          # Skip if SIMP version doesn't match target base OS version
+          # TODO  Without a multi tarball/ISO matrix, do we even need the
+          #       version mapping check any more?
+          #       (embedding the vermap.yaml in simp-rake-helpers is heinous)
+          unless Array(vermap[simpver.split('.').first]).include?(baseosver.split('.').first)
+            fail("Could not find SIMP version mapping for #{simpver} for Base OS #{baseosver}")
+          end
 
-            # SIMP 6
-            if namepieces[1] =~ /^\d/
-              simpver = namepieces[1..2].join('-')
-              baseos  = namepieces[3]
-            else
-              simpver = namepieces[3..-1].join('-')
-              baseos  = namepieces[2]
-            end
+          # NOTE no pruning any more; just mirror in repos that have already been pruned
+          # NOTE tarball extraction moved to iso:unpack:tarball
+          # NOTE no symlinking noarch into x86_64 anymore (weird separation compared to EL)
 
-            iso_dirs = Dir.glob("#{File.expand_path(args.unpacked_dvds)}/#{baseos}*")
-            if iso_dirs.empty?
-              fail("Error: No unpacked DVD directories found for '#{baseos}' under '#{File.expand_path(args.unpacked_dvds)}'")
-            end
 
-            # Process each unpacked base OS ISO directory found
-            iso_dirs.each do |dir|
-              baseosver = '???'
-              arch      = '???'
+          # - identify all staged RPM repos
+          # - FIXME Update productmd .treeinfo with correct tree + variants for all RPM repos
 
-              # read the .treeinfo file (INI format)
-              # ------------------------------------
-              require 'puppet'
-              require 'puppet/util/inifile'
+          # Make sure we have all of the necessary RPMs!
+          # FIXME include all repos in the repoclosure
+          Rake::Task['pkg:repoclosure'].invoke(File.expand_path(unpacked_dvd_dir))
+      require 'pry'; binding.pry
 
-              file = "#{dir}/.treeinfo"
-              fail("ERROR: no file '#{file}'") unless File.file?(file)
+          # Do some sane chmod'ing and build ISO
+          system("chmod -fR u+rwX,g+rX,o=g #{unpacked_dvd_dir}")
+          simp_output_name = "SIMP-#{simpver}-#{baseos}-#{baseosver}-#{arch}"
+          @simp_output_iso = "#{simp_output_name}.iso"
 
-              ini = Puppet::Util::IniConfig::PhysicalFile.new(file)
-              ini.read
-              sections = ini.sections.map{ |s| s.name }
+          mkisofs_cmd = [
+            'mkisofs',
+            "-A SIMP-#{simpver}",
+            "-V SIMP-#{simpver}",
+            "-volset SIMP-#{simpver}",
+            '-uid 0',
+            '-gid 0',
+            '-J',
+            '-joliet-long',
+            '-r',
+            '-v',
+            '-T',
+            '-b isolinux/isolinux.bin',
+            '-c boot.cat',
+            '-boot-load-size 4',
+            '-boot-info-table',
+            '-no-emul-boot',
+            '-eltorito-alt-boot',
+            '-e images/efiboot.img',
+            # This is apparently needed twice to get the lines above it to
+            # take. Not sure why.
+            '-no-emul-boot',
+            '-m TRANS.TBL',
+            '-x ./lost+found',
+            "-o #{@simp_output_iso}",
+            unpacked_dvd_dir
+          ]
 
-              # NOTE: RHEL7 discs claim [general] section is deprecated.
-              if sections.include?('general')
-                h = Hash[ ini.get_section('general').entries.map{|k,v| [k,v]} ]
-                arch      = h.fetch('arch', arch).strip
-                baseosver = h.fetch('version', baseosver).strip
-                baseosver += '.0' if (baseosver.count('.') < 1)
-              end
-              # ------------------------------------
-
-              # Skip if SIMP version doesn't match target base OS version
-              unless Array(vermap[simpver.split('.').first]).include?(baseosver.split('.').first)
-                if verbose
-                  warn("Could not find SIMP version mapping for #{simpver} for Base OS #{baseosver}")
-                end
-
-                next
-              end
-
-              mkrepo = baseosver.split('.').first == '5' ? 'createrepo -s sha -p' : 'createrepo -p'
-
-              @simp_dvd_dirs.each do |clean_dir|
-                if File.directory?("#{dir}/#{clean_dir}")
-                  rm_rf("#{dir}/#{clean_dir}", :verbose => verbose)
-                elsif File.file?("#{dir}/#{clean_dir}")
-                  fail("Error: #{dir}/#{clean_dir} is a file, expecting directory!")
-                end
-              end
-
-              # Prune unwanted packages
-              begin
-                system("tar --no-same-permissions -C #{dir} -xzf #{tball} *simp_pkglist.txt")
-              rescue
-                # Does not matter if the command fails
-              end
-
-              pkglist_file = ENV.fetch(
-                'SIMP_PKGLIST_FILE',
-                File.join(dir,"#{baseosver.split('.').first}-simp_pkglist.txt")
-              )
-
-              puts
-              puts '-'*80
-              puts "### Pruning packages not in file '#{pkglist_file}'"
-              puts
-              puts '   (override this with `SIMP_PKGLIST_FILE=<file>`)'
-              puts
-              puts '-'*80
-              puts
-
-              if (args.prune.casecmp("false") != 0) && File.exist?(pkglist_file)
-                exclude_pkgs = Array.new
-                File.read(pkglist_file).each_line do |line|
-                  next if line =~ /^(\s+|#.*)$/
-                  exclude_pkgs.push(line.chomp)
-                end
-                prune_packages(dir,['SIMP'],exclude_pkgs,mkrepo)
-              end
-
-              # Add the SIMP code
-              system("tar --no-same-permissions -C #{dir} -xzf #{tball}")
-
-              Dir.chdir("#{dir}/SIMP") do
-                # Add the SIMP Dependencies
-                simp_base_ver = simpver.split('-').first
-
-                if $simp6
-                  yum_dep_location = File.join(@build_dir,'yum_data','packages')
-                else
-                  simp_dep_src = %(SIMP#{simp_base_ver}_#{baseos}#{baseosver}_#{arch})
-                  yum_dep_location = File.join(@build_dir,'yum_data',simp_dep_src,'packages')
-                end
-
-                unless File.directory?(yum_dep_location)
-                  fail("Could not find dependency directory at #{yum_dep_location}")
-                end
-
-                yum_dep_rpms = Dir.glob(File.join(yum_dep_location,'*.rpm'))
-                if yum_dep_rpms.empty?
-                  fail("Could not find any dependency RPMs at #{yum_dep_location}")
-                end
-
-                # Add any one-off RPMs that you might want to add to your own build
-                # These are *not* checked to make sure that they actually match your
-                # environment
-                aux_packages = File.join(File.dirname(yum_dep_location),'aux_packages')
-                if File.directory?(aux_packages)
-                  yum_dep_rpms += Dir.glob(File.join(aux_packages,'*.rpm'))
-                end
-
-                yum_dep_rpms.each do |rpm|
-                  rpm_arch = rpm.split('.')[-2]
-
-                  unless File.directory?(rpm_arch)
-                    mkdir(rpm_arch)
-                  end
-
-                  # Just in case this is a symlink, broken, or some other nonsense.
-                  target_file = File.join(rpm_arch,File.basename(rpm))
-                  rm_f(target_file) if File.exist?(target_file)
-
-                  cp(rpm,rpm_arch, :verbose => verbose)
-                end
-
-                fail("Could not find architecture '#{arch}' in the SIMP distribution") unless File.directory?(arch)
-                # Get everything set up properly...
-                Dir.chdir(arch) do
-                  Dir.glob('../*') do |rpm_dir|
-                    # Don't dive into ourselves
-                    next if File.basename(rpm_dir) == arch
-
-                    Dir.glob(%(#{rpm_dir}/*.rpm)) do |source_rpm|
-                      link_target = File.basename(source_rpm)
-                      if File.exist?(source_rpm) && File.exist?(link_target)
-                        next if Pathname.new(source_rpm).realpath == Pathname.new(link_target).realpath
-                      end
-
-                      ln_sf(source_rpm,link_target, :verbose => verbose)
-                    end
-                  end
-
-                  fail("Error: Could not run createrepo in #{Dir.pwd}") unless system(%(#{mkrepo} .))
-                end
-              end
-
-              # Make sure we have all of the necessary RPMs!
-              Rake::Task['pkg:repoclosure'].invoke(File.expand_path(dir))
-
-              # Do some sane chmod'ing and build ISO
-              system("chmod -fR u+rwX,g+rX,o=g #{dir}")
-              simp_output_name = "SIMP-#{simpver}-#{baseos}-#{baseosver}-#{arch}"
-              @simp_output_iso = "#{simp_output_name}.iso"
-
-              mkisofs_cmd = [
-                'mkisofs',
-                "-A SIMP-#{simpver}",
-                "-V SIMP-#{simpver}",
-                "-volset SIMP-#{simpver}",
-                '-uid 0',
-                '-gid 0',
-                '-J',
-                '-joliet-long',
-                '-r',
-                '-v',
-                '-T',
-                '-b isolinux/isolinux.bin',
-                '-c boot.cat',
-                '-boot-load-size 4',
-                '-boot-info-table',
-                '-no-emul-boot',
-                '-eltorito-alt-boot',
-                '-e images/efiboot.img',
-                # This is apparently needed twice to get the lines above it to
-                # take. Not sure why.
-                '-no-emul-boot',
-                '-m TRANS.TBL',
-                '-x ./lost+found',
-                "-o #{@simp_output_iso}",
-                dir
-              ]
-
-              system(mkisofs_cmd.join(' '))
-            end
-          end # End of tarfiles loop
+          system(mkisofs_cmd.join(' '))
 
           # If we got here and didn't generate any ISOs, something went horribly wrong
           fail('Error: No ISO was built!') unless @simp_output_iso
@@ -561,7 +145,7 @@ module Simp::Rake::Build
         desc <<-EOM
         Build the source ISO.
           Note: The process clobbers the temporary and built files, rebuilds the
-          tarball(s) and packages the source ISO. Therefore it will take a
+          (s) and packages the source ISO. Therefore it will take a
           while.
             * :key - The GPG key to sign the RPMs with. Defaults to 'prod'.
         EOM
