@@ -1,6 +1,7 @@
 require 'simp/rake'
 require 'simp/rake/build/constants'
 require 'simp/build/iso/tree_info_reader'
+require 'simp/build/iso/local_repoclosure'
 
 module Simp; end
 module Simp::Rake; end
@@ -97,63 +98,25 @@ module Simp::Rake::Build
           # - identify all staged RPM repos
           # - FIXME Update productmd .treeinfo with correct tree + variants for all RPM repos
 
+
+
           # Make sure we have all of the necessary RPMs!
-
-
-          # Locate (non-hidden) RPM repositories under the directory tree
-          require 'find'
-          repo_dirs = []
-          Find.find(unpacked_dvd_dir) do |path|
-            next unless File.directory?(path)
-            Find.prune if File.basename(path).start_with?('.') # skip hidden
-            next unless File.basename(path) == 'repodata'
-            if File.file?(File.join(path,'repomd.xml'))
-              repo_dirs << File.dirname(path)
-              Find.prune
-            end
-          end
-
-          _repoclose_pe = false
-          yum_conf_template = <<~YUM_CONF
-            [main]
-            keepcache=0
-            exactarch=1
-            obsoletes=1
-            gpgcheck=0
-            plugins=1
-            installonly_limit=5
-            <% unless #{_repoclose_pe} -%>
-            exclude=*-pe-*
-            <% end -%>
-          YUM_CONF
-
-          require 'tmpdir'
-          Dir.mktmpdir(['simp','repoclosure']) do |dir|
-            yum_conf = File.join(dir,'yum.conf')
-            File.open(yum_conf, 'w') do |f|
-              f.write(ERB.new(yum_conf_template,nil,'-').result(binding))
-            end
-            cmd = "dnf -v -d9 repoclosure -c '#{yum_conf}' --installroot '#{dir}' "
-            cmd += repo_dirs.map do |path|
-              # Give repoids a unique suffix
-              repoid = File.basename(path) + '.staged'
-               " \\\n  --repofrompath '#{repoid},file://#{path}' \\\n  --repoid '#{repoid}'"
-            end.join(' ')
-            puts c = File.expand_path('_test_repoclosure.sh')
-            File.open(c,'w'){|f| f.puts cmd }
-
+          Simp::Build::Iso::LocalRepoclosure.repoclosure(
+            unpacked_dvd_dir,
+            enable_module_streams: [
+              'javapackages-runtime:201801',
+              'httpd:2.4',
+              'python36:3.6',
+              'nodejs:12',
+              '389-directory-server:stable',
+              '389-ds:1.4'
+            ]
+          ) do |cmd|
             puts "== Running repoclosure on all repositories"
+require'pry'; binding.pry
             sh cmd
           end
-
-
-          # FIXME move the code above into:
-          # Rake::Task['pkg:repoclosure'].invoke(File.expand_path(unpacked_dvd_dir))
-      require 'pry'; binding.pry
-
-
-
-
+          # FIXME ^^ re-use the above class code in the pkg:repoclosure task
 
           # Do some sane chmod'ing and build ISO
           system("chmod -fR u+rwX,g+rX,o=g #{unpacked_dvd_dir}")
