@@ -58,8 +58,10 @@ module Simp::Rake::Build
         "#{map['baseos']}#{map['version']}-#{map['arch']}"
       end
 
-      # Determine target directory/name
+      # Determine target directory/name based on ISO, return absolute path to ISO's target dir
       def unpack_target_path(iso_path, version, targetdir)
+        # TODO: it's safer to attempt to get the data for this from the ISO's
+        # .treeinfo first, and fall back to splitting the ISO's filename
         unpack_dir_name = dirname_from_iso_name(iso_path, version: version)
         File.expand_path(unpack_dir_name, targetdir)
       end
@@ -109,6 +111,69 @@ module Simp::Rake::Build
           File.exist?(repomd_file)
         end
 
+        # Identify top-level directories the tarball provides
+        def toplevel_tarball_dirs(tarball)
+          cmd = "tar --exclude='./*/*' -tf #{tarball} | grep /$"
+          %x{#{cmd}}.split("\n").map{|x| x.gsub(%r[(\A./|/\Z)],'')}
+        end
+
+        # Remove tarball dirs from the staged ISO dir before unpacking
+        def remove_staged_tarball_dirs(staged_toplevel_tar_dirs)
+          staged_toplevel_tar_dirs.each do |clean_dir|
+            if File.directory?(clean_dir)
+              puts "-- Removing staged top-level tarball dir '#{clean_dir}' before unpacking tarball..."
+              FileUtils.rm_rf(clean_dir, :verbose => verbose)
+            elsif File.file?(clean_dir)
+              fail("Error: #{clean_dir} is a file, expecting directory!")
+            end
+          end
+          staged_toplevel_tar_dirs
+        end
+
+        # Unpack the tarball!
+        def unpack_tarball(tarball, unpacked_dvd_dir)
+          v = verbose ? 'v' : ''
+          puts '','== Unpacking tarball...'
+          sh "tar --no-same-permissions -C '#{unpacked_dvd_dir}' -z#{v}xf '#{tarball}'"
+          puts '== Finished unpacking tarball'
+        end
+
+        # Identify top-level directory trees containing RPMs
+        def rpm_dir_trees(staged_toplevel_tar_dirs)
+          require 'find'
+          staged_toplevel_tar_dirs.select do |dir|
+            Find.find(dir) do |path|
+              break(true) if path =~ /.*\.rpm$/
+              false
+            end
+          end
+        end
+
+        def create_repos_in_dirtrees_with_rpms(staged_toplevel_tar_dirs)
+          # Identify top-level directory trees containing RPMs
+          rpm_dirs = rpm_dir_trees(staged_toplevel_tar_dirs)
+
+
+          # Create RPM repository for those directory trees, if necessary
+          rpm_dirs.each do |dir|
+            puts "\n== Creating repository in RPM directory: '#{File.basename(dir)}'"
+            if repo_directory?(dir)
+              puts '', "-- SKIPPING createrepo! Repo directory exists in '#{dir}'; not messing with it", ''
+              next
+            end
+            Dir.chdir(dir) do
+              puts "  (Full path: '#{dir}')"
+              # Future improvements:
+              #
+              #  - TODO use `createrepo_c` when available and target >EL7
+              #  - TODO use group or moulemd metadata if present
+              #
+              sh 'createrepo -p .'
+            end
+          end
+        end
+
+
         namespace :stage do
           # --------------------------------------------------------------------------------
           desc <<~DESC
@@ -131,53 +196,18 @@ module Simp::Rake::Build
             validate_unpacked_baseos_dvd_dir(unpacked_dvd_dir)
 
             # Identify top-level directories the tarball provides
-            cmd = "tar --exclude='./*/*' -tf #{tarball} | grep /$"
-            toplevel_tar_dirnames = %x{#{cmd}}.split("\n").map{|x| x.gsub(%r[(\A./|/\Z)],'')}
-            staged_toplevel_tar_dirs = toplevel_tar_dirnames.map{|x| File.join(unpacked_dvd_dir,x) }
+            staged_toplevel_tar_dirs = toplevel_tarball_dirs(tarball).map{|x| File.join(unpacked_dvd_dir,x) }
 
             # Remove each of those dirs from the staged ISO dir before unpacking
-            staged_toplevel_tar_dirs.each do |clean_dir|
-              if File.directory?(clean_dir)
-                puts "-- Removing staged top-level dir '#{clean_dir}' before unpacking..."
-                FileUtils.rm_rf(clean_dir, :verbose => verbose)
-              elsif File.file?(clean_dir)
-                fail("Error: #{clean_dir} is a file, expecting directory!")
-              end
-            end
+            # (keeps obsolete files from previous tarball from polluting unpack dir)
+            remove_staged_tarball_dirs(staged_toplevel_tar_dirs)
 
             # Unpack the tarball!
-            v = verbose ? 'v' : ''
-            puts '','== Unpacking tarball...'
-            sh "tar --no-same-permissions -C '#{unpacked_dvd_dir}' -z#{v}xf '#{tarball}'"
-            puts '== Finished unpacking tarball'
-
+            unpack_tarball(tarball, unpacked_dvd_dir)
 
             # Identify top-level directory trees containing RPMs
-            require 'find'
-            rpm_dirs = staged_toplevel_tar_dirs.select do |dir|
-              Find.find(dir) do |path|
-                break(true) if path =~ /.*\.rpm$/
-                false
-              end
-            end
-
             # Create RPM repository for those directory trees, if necessary
-            rpm_dirs.each do |dir|
-              puts "\n== Creating repository in RPM directory: '#{File.basename(dir)}'"
-              if repo_directory?(dir)
-                puts '', "-- SKIPPING createrepo! Repo directory exists in '#{dir}'; not messing with it", ''
-                next
-              end
-              Dir.chdir(dir) do
-                puts "  (Full path: '#{dir}')"
-                # Future improvements:
-                #
-                #  - TODO use `createrepo_c` when available and target >EL7
-                #  - TODO use group or moulemd metadata if present
-                #
-                sh 'createrepo -p .'
-              end
-            end
+            create_repos_in_dirtrees_with_rpms(staged_toplevel_tar_dirs)
           end
 
           # --------------------------------------------------------------------------------
@@ -203,7 +233,6 @@ module Simp::Rake::Build
             repos_base_dir = File.expand_path(args.repos_base_dir)
             unpacked_dvd_dir = File.expand_path(args.unpacked_dvd_dir)
             validate_unpacked_baseos_dvd_dir(unpacked_dvd_dir)
-
 
             puts "\n== Staging local repos from #{unpacked_dvd_dir}..."
 
@@ -237,81 +266,110 @@ module Simp::Rake::Build
             puts "-- Done staging local repos\n"
           end
         end
-      end
 
+        namespace :unpack do
+          desc <<~DESC
+            Cleans an ISO's unpack directory
 
-      desc <<~DESC
-        Unpack an ISO. Unpacks either a RHEL or CentOS ISO into
-        <targetdir>/<RHEL|CentOS><version>-<arch>.
+            Uses the same logic to determine path from either a RHEL or CentOS
+            ISO from <targetdir>/<RHEL|CentOS><version>-<arch>.
 
-           * :iso_path - Full path to the ISO image to unpack.
-           * :merge - If true, then automatically merge any existing
-             directories. Defaults to prompting.
-           * :targetdir - The parent directory for the to-be-created directory
-             containing the unpacked ISO. Defaults to the current directory.
-           * :isoinfo - The isoinfo executable to use to extract stuff from the ISO.
-             Defaults to 'isoinfo'.
-           * :version - optional override for the <version> number (e.g., '7.0' instead of '7')
+               * :iso_path - Full path to the ISO image to unpack.
+               * :targetdir - The parent directory for the to-be-created directory
+                 containing the unpacked ISO. Defaults to the current directory.
+               * :version - optional override for the <version> number (e.g., '7.0' instead of '7')
+          DESC
+          task :clean, [:iso_path, :targetdir, :version] do |t, args|
+            iso_path     = args.iso_path
+            targetdir    = args.targetdir
+            version      = args.version
+            # Validate arguments
+            File.exist?(iso_path) or
+              fail "Error: You must provide the full path and filename of the ISO image."
 
-      DESC
-      task :unpack,[:iso_path, :merge, :targetdir, :isoinfo, :version, :unpack_repos] do |t,args|
-        args.with_defaults(
-          :iso_path   => '',
-          :isoinfo    => 'isoinfo',
-          :targetdir  => Dir.pwd,
-          :merge      => false,
-          :version => false,
-          :unpack_repos => false,
-        )
+            valid_iso?(iso_path) or fail "Error: The file provided is not a valid ISO."
+            clean_dir = unpack_target_path(iso_path, version, targetdir)
 
-        iso_path     = args.iso_path
-        iso_info     = which(args.isoinfo)
-        targetdir    = args.targetdir
-        merge        = args.merge
-        version      = args.version
-        unpack_repos = args.unpack_repos
+            puts "-- Removing unpacked ISO staging directory at '#{clean_dir}'..."
+            FileUtils.rm_rf(clean_dir, :verbose => verbose)
 
-        # Validate arguments
-        File.exist?(iso_path) or
-          fail "Error: You must provide the full path and filename of the ISO image."
-
-        valid_iso?(iso_path) or fail "Error: The file provided is not a valid ISO."
-        out_dir = unpack_target_path(iso_path, version, targetdir)
-
-        # Attempt a merge
-        # NOTE: merging modulary repos would destroy the modular metadata
-        if File.exist?(out_dir) and merge.to_s.strip == 'false'
-          puts "Directory '#{out_dir}' already exists! Would you like to merge? [Yn]?"
-          unless $stdin.gets.strip.match(/^(y.*|$)/i)
-            puts "Skipping #{iso_path}"
-            next
           end
         end
 
-        puts "Target dir: #{out_dir}"
-        mkdir_p(out_dir)
+        desc <<~DESC
+          Unpack an ISO. Unpacks either a RHEL or CentOS ISO into
+          <targetdir>/<RHEL|CentOS><version>-<arch>.
 
-        # Build list of files to unpack
-        iso_toc = %x{#{iso_info} -Rf -i #{iso_path}}.split("\n")
-        iso_toc.each { |iso_entry| iso_toc.delete(File.dirname(iso_entry)) }
-        delete_repos_from_iso_toc(iso_toc, iso_path, iso_info) unless unpack_repos
+             * :iso_path - Full path to the ISO image to unpack.
+             * :merge - If true, then automatically merge any existing
+               directories. Defaults to prompting.
+             * :targetdir - The parent directory for the to-be-created directory
+               containing the unpacked ISO. Defaults to the current directory.
+             * :isoinfo - The isoinfo executable to use to extract stuff from the ISO.
+               Defaults to 'isoinfo'.
+             * :version - optional override for the <version> number (e.g., '7.0' instead of '7')
 
-        # Unpack the ISO
-        progress = ProgressBar.create(:title => 'Unpacking', :total => iso_toc.size)
+        DESC
+        task :unpack,[:iso_path, :merge, :targetdir, :isoinfo, :version, :unpack_repos] do |t,args|
+          args.with_defaults(
+            :iso_path   => '',
+            :isoinfo    => 'isoinfo',
+            :targetdir  => Dir.pwd,
+            :merge      => false,
+            :version => false,
+            :unpack_repos => false,
+          )
 
-        iso_toc.each do |iso_entry|
-          target = "#{out_dir}#{iso_entry}"
-          unless File.exist?(target)
-            FileUtils.mkdir_p(File.dirname(target))
-            system("#{iso_info} -R -x #{iso_entry} -i #{iso_path} > #{target}")
+          iso_path     = args.iso_path
+          iso_info     = which(args.isoinfo)
+          targetdir    = args.targetdir
+          merge        = args.merge
+          version      = args.version
+          unpack_repos = args.unpack_repos
+
+          # Validate arguments
+          File.exist?(iso_path) or
+            fail "Error: You must provide the full path and filename of the ISO image."
+
+          valid_iso?(iso_path) or fail "Error: The file provided is not a valid ISO."
+          out_dir = unpack_target_path(iso_path, version, targetdir)
+
+          # Attempt a merge
+          # NOTE: merging modulary repos would destroy the modular metadata
+          if File.exist?(out_dir) and merge.to_s.strip == 'false'
+            puts "Directory '#{out_dir}' already exists! Would you like to merge? [Yn]?"
+            unless $stdin.gets.strip.match(/^(y.*|$)/i)
+              puts "Skipping #{iso_path}"
+              next
+            end
           end
-          if progress
-            progress.increment
-          else
-            print "#"
+
+          puts "Target dir: #{out_dir}"
+          mkdir_p(out_dir)
+
+          # Build list of files to unpack
+          iso_toc = %x{#{iso_info} -Rf -i #{iso_path}}.split("\n")
+          iso_toc.each { |iso_entry| iso_toc.delete(File.dirname(iso_entry)) }
+          delete_repos_from_iso_toc(iso_toc, iso_path, iso_info) unless unpack_repos
+
+          # Unpack the ISO
+          progress = ProgressBar.create(:title => 'Unpacking', :total => iso_toc.size)
+
+          iso_toc.each do |iso_entry|
+            target = "#{out_dir}#{iso_entry}"
+            unless File.exist?(target)
+              FileUtils.mkdir_p(File.dirname(target))
+              system("#{iso_info} -R -x #{iso_entry} -i #{iso_path} > #{target}")
+            end
+            if progress
+              progress.increment
+            else
+              print "#"
+            end
           end
         end
       end
+
 
     end
   end
