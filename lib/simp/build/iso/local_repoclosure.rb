@@ -10,30 +10,38 @@ module Simp::Build::Iso
     #   - [ ] EL7 `dnf repoclosure` (untested)
     #
     # Maybe support:
-    #   - [ ] EL7 `repoclosure`? (PITA, see old code)
+    #   - [ ] EL7 plan-jane `repoclosure`? (PITA, see old code)
     #
     #  On EL7, ensure:
     #     yum install -y dnf dnf-plugins-core
     #
     #  IIRC, EL7 dnf uses `--repo` instead of `--repoid`, too
-    def self.repoclosure(dir_of_repos, enable_module_streams: [], repoclose_pe: false)
-      repo_dirs = locate_repo_dirs(dir_of_repos)
+    def self.repoclosure(staging_dir, enable_module_streams: [], repoclose_pe: false)
+      repo_dirs = locate_repo_dirs(staging_dir)
 
       require 'tmpdir'
       Dir.mktmpdir(['simp','repoclosure']) do |dir|
         yum_conf = File.join(dir,'yum.conf')
+        reposdir = File.join(dir,'yum.repos.d')
+
         File.open(yum_conf, 'w') do |f|
           f.write(ERB.new(yum_conf_erb(repoclose_pe),nil,'-').result(binding))
         end
-        cmd = "dnf -v repoclosure -c '#{yum_conf}' --installroot '#{dir}' "
-        cmd += repo_dirs.map do |path|
-          # Give repoids a unique suffix
-          repoid = File.basename(path) + '.staged'
+        FileUtils.mkdir_p(reposdir)
+
+        dnf_base_cmd = "dnf -v -c '#{yum_conf}' --installroot '#{dir}' "
+
+        # Need to set reposdir (even if its empty), or dnf will also use the
+        # host system's repos - resulting in repoid collisions
+        dnf_base_cmd += "--setopt reposdir='#{reposdir}' "
+
+        repoclosure_cmd = dnf_base_cmd + 'repoclosure  ' + repo_dirs.map do |path|
+          repoid = File.basename(path)
            " \\\n  --repofrompath '#{repoid},file://#{path}' \\\n  --repoid '#{repoid}'"
         end.join(' ')
 
         if block_given?
-          yield cmd
+          yield repoclosure_cmd, dnf_base_cmd
         else
           fail( 'Unimplemented: run command with feedback (popen3?)' )
         end
@@ -41,10 +49,10 @@ module Simp::Build::Iso
     end
 
     # Locate all (non-hidden) RPM repositories under the directory tree
-    def self.locate_repo_dirs(dir_of_repos)
+    def self.locate_repo_dirs(staging_dir)
       require 'find'
       repo_dirs = []
-      Find.find(dir_of_repos) do |path|
+      Find.find(staging_dir) do |path|
         next unless File.directory?(path)
         Find.prune if File.basename(path).start_with?('.') # skip hidden
         next unless File.basename(path) == 'repodata'
@@ -56,7 +64,7 @@ module Simp::Build::Iso
       repo_dirs
     end
 
-    # Template a yum.conf to run inside a tempdir
+    # Template a dnf.conf / yum.conf to run inside a tempdir
     def self.yum_conf_erb(repoclose_pe=false)
       <<~YUM_CONF
         [main]

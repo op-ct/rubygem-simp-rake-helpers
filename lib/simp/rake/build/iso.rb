@@ -33,6 +33,52 @@ module Simp::Rake::Build
           end
         end
 
+
+        desc <<~EOM
+          Repoclose with modularity !! MUST BE ROOT USER !!
+
+           * :staging_dir   - Path to the unpacked base OS ISO
+           * :repo_packages_yaml - Path to relevant repos_packages.yaml file
+
+           Requirements:
+
+           * Run as root user (to run `dnf module enable`)
+           * System must have `dnf repoclosure`
+        EOM
+
+        # FIXME
+        task :modular_repoclose_rootonly,[:staging_dir,:repo_packages_yaml] do |t,args|
+          # TODO move unpacking the tarball into a separate task, like build:unpack:tar
+          if args.nil?
+            fail("Error: You must specify a staging directory!")
+          end
+          if ENV.fetch('USER') != 'root'
+            fail( ['', '!'*80, 'ERROR: repoclosing with modularity REQUIRES root to run `dnf module enable`', '!'*80, ''].join("\n\n"))
+          end
+          staging_dir = File.expand_path(args.staging_dir)
+          # Make sure we have all of the necessary RPMs!
+          Simp::Build::Iso::LocalRepoclosure.repoclosure(
+            staging_dir,
+            # FIXME this is a hack to simulate the data we get from the pulp mirror's repo_packages.yaml
+            # TODO integrate repo_packages.yaml for each distro
+            # TODO implement repo_packages.yaml data ingest to provide this data here
+            enable_module_streams: [
+              'javapackages-runtime:201801',
+              'httpd:2.4',
+              'python36:3.6',
+              'nodejs:12',
+              '389-directory-server:stable',
+              '389-ds:1.4'
+            ]
+          ) do |cmd, dnf_base_cmd|
+            puts "== Running repoclosure on all repositories"
+
+require'pry'; binding.pry
+            sh cmd
+          end
+        end
+
+
         desc <<~EOM
           Build the SIMP ISO(s).
            * :tarball - Path of the source SIMP tarball
@@ -94,15 +140,16 @@ module Simp::Rake::Build
           # NOTE tarball extraction moved to iso:unpack:tarball
           # NOTE no symlinking noarch into x86_64 anymore (weird separation compared to EL)
 
-
           # - identify all staged RPM repos
           # - FIXME Update productmd .treeinfo with correct tree + variants for all RPM repos
-
 
 
           # Make sure we have all of the necessary RPMs!
           Simp::Build::Iso::LocalRepoclosure.repoclosure(
             unpacked_dvd_dir,
+            # FIXME this is a hack to simulate the data we get from the pulp mirror's repo_packages.yaml
+            # TODO integrate repo_packages.yaml for each distro
+            # TODO implement repo_packages.yaml data ingest to provide this data here
             enable_module_streams: [
               'javapackages-runtime:201801',
               'httpd:2.4',
@@ -111,8 +158,14 @@ module Simp::Rake::Build
               '389-directory-server:stable',
               '389-ds:1.4'
             ]
-          ) do |cmd|
+          ) do |cmd, dnf_base_cmd|
             puts "== Running repoclosure on all repositories"
+
+            if ENV.fetch('USER') != 'root'
+              @skip_apply = true
+              @skip_apply_reason = '[**user is not root**]' unless @skip_apply_reason
+           end
+
 require'pry'; binding.pry
             sh cmd
           end
