@@ -79,7 +79,7 @@ module Simp::Build::Iso
       else
         # pre-productmd .treeinfo format (EL7)
         unless section('general')
-          fail "ERROR: Cannot parse: Not a pre-prouct .treeinfo format: '#{@file}' !"
+          fail "ERROR: Cannot parse: Not a pre-productmd .treeinfo format: '#{@file}' !"
         end
         version = PRE_PRODUCTMD_TREEINFO_VERSION
         warn 'Detected pre-productmd .treeinfo format (<= EL7)' if @verbose
